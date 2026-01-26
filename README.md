@@ -40,25 +40,6 @@ pip install -r requirements.txt
 python -m kiss
 ```
 
-### Basic Usage
-
-```bash
-# Simple email lookup
-python -m kiss user@example.com
-
-# Phone number analysis
-python -m kiss +1234567890
-
-# Username enumeration
-python -m kiss @johndoe
-
-# IP address intelligence
-python -m kiss 192.168.1.1
-
-# Address geocoding
-python -m kiss "123 Main St, City, Country"
-```
-
 ### Advanced Queries (Planned)
 
 ```bash
