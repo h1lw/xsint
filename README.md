@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # KISS - Keep It Simple, Stupid
 
 <div align="center">
@@ -292,3 +293,7 @@ For security vulnerabilities, please email security@example.com rather than usin
 Built with ❤️ for the OSINT community
 
 </div>
+=======
+# kiss
+A modern OSINT toolkit.
+>>>>>>> 468e99c8657903842932317ae9129c44d764fdeb
