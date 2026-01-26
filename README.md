@@ -1,7 +1,4 @@
-<<<<<<< HEAD
 # KISS - A modern OSINT Toolkit.
-
-<div align="center">
 
 A modern OSINT toolkit for comprehensive intelligence gathering with structured query support.
 
