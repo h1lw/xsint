@@ -276,12 +276,4 @@ For security vulnerabilities, please email security@example.com rather than usin
 
 <div align="center">
 
-**Keep It Simple, Stupid**
-
 Built with ❤️ for the OSINT community
-
-</div>
-=======
-# kiss
-A modern OSINT toolkit.
->>>>>>> 
