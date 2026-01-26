@@ -1,15 +1,7 @@
 <<<<<<< HEAD
-# KISS - Keep It Simple, Stupid
+# KISS - A modern OSINT Toolkit.
 
 <div align="center">
-
-```█        ▀                 
-█   ▄  ▄▄▄     ▄▄▄    ▄▄▄  
-█ ▄▀     █    █   ▀  █   ▀ 
-█▀█      █     ▀▀▀▄   ▀▀▀▄ 
-█  ▀▄  ▄▄█▄▄  ▀▄▄▄▀  ▀▄▄▄▀
-  A modern OSINT toolkit
-```
 
 A modern OSINT toolkit for comprehensive intelligence gathering with structured query support.
 
