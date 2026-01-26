@@ -5,7 +5,13 @@ import sys
 
 def run_simple_tui():
     """Run a simple TUI without curses."""
-    print("🔍 XSINT - Enhanced Open Source Intelligence Tool")
+    print("█        ▀                               ")
+    print(" █   ▄  ▄▄▄     ▄▄▄▄    ▄▄▄▄      ")
+    print("█ ▄▀     █    █   ▀  █   ▀▀▄ ▄ ▀▀▄▄  ▀  ▀")
+    print("█  ▀▄  ▄▄▄█▄▄▄  ▀▀▄▄▀  ▄▄▄▄▀  ▄▄▄▄▀  ▄▄▄▄▀")
+    print("█  ▀   ▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄▄")
+    print("          modern OSINT toolkit              ")
+    print("")
     print("✅ Core Features:")
     print("   - Enhanced Phone Intelligence (10x improvement)")
     print("   - Password Hash Lookup (HIBP + HashMob.net)")
