@@ -1,20 +1,63 @@
-```
-
-                 "             m
- m   m   mmm   mmm    m mm   mm#mm
-  #m#   #   "    #    #"  #    #      By: Hollow
-  m#m    """m    #    #   #    #      v0.1.0
- m" "m  "mmm"  mm#mm  #   #    "mm
-```
-
 **XSINT** — a minimal OSINT tool.
+
+## Example
+```bash
+                  "             m
+  m   m   mmm   mmm    m mm   mm#mm
+   #m#   #   "    #    #"  #    #      By: Hollow
+   m#m    """m    #    #   #    #      v0.1.0
+  m" "m  "mmm"  mm#mm  #   #    "mm
+ ╭─ [ SYSTEM ONLINE ]
+ │
+[METAMON] 🐙 Added commits in 0.26s !
+
+ ├─ 🌐 DNS
+ │     Mail Server : gmail-smtp-in.l.google.com
+ │     Provider    : Google Workspace
+ │
+ ├─ 👻 GHunt
+ │      ╰─ 👤 Account
+ │            Gaia ID       : 104632770280683490901
+ │            Profile Photo : https://lh3.googleusercontent.com/a-/ALV-UjVa8aeap9TKyd9bx-1a3LJ9279hoW67ATmfM5uWrv-RjW0KfA
+ │
+ ├─ 🐙 GitFive
+ │      ├─ 📧 Email
+ │      │     Email Resolved : testtest@gmail.com → @ribo
+ │      │
+ │      ╰─ 👤 GitHub
+ │            Username : ribo
+ │            ID       : 64479
+ │
+ ├─ 🤖 Haxalot
+ │     Status : Module locked (Run --set-key haxalot)
+ │
+ ├─ 🔍 IntelX
+ │     IntelX : API key required. Get one at https://intelx.io
+ │
+ ╰─ ☢  9Ghz
+       Breaches : 191
+       Breach   : amai.com (2025-01-08)
+       Breach   : Stolplit.ru Database (2025-01-01)
+       Breach   : oropocket.com (2025-01-01)
+       Breach   : 1win.casino (2024-11-01)
+       Breach   : Ticketek Database (2024-05-01)
+       Breach   : leslipfrancais.fr (2024-04-01)
+       Breach   : boAt Lifestyle India Database (2024-03-01)
+       Breach   : AT&T 2021 Database (2024-03-01)
+       Breach   : Digido.ph Database (2024-02-01)
+       Breach   : LDLC Database (2024-02-01)
+       Note     : +181 more breaches
+
+```
+
 
 ## Installation
 
-### pip (system-wide)
-
+### No installation
 ```bash
-pip install xsint
+git clone https://github.com/memorypudding/xsint.git
+cd xsint
+python3 -m xsint
 ```
 
 ### pip (from source)
@@ -25,30 +68,27 @@ cd xsint
 pip install .
 ```
 
-### pipx (isolated)
-
-```bash
-pipx install xsint
-```
-
-### From source (development)
-
-```bash
-git clone https://github.com/memorypudding/xsint.git
-cd xsint
-pip install -e .
-```
-
 After installing, the `xsint` command is available globally:
 
 ```bash
 xsint --help
-```
+usage: xsint [-h] [--list] [--list-modules [TYPE]] [--set-key ARGS [ARGS ...]] [--proxy URL] [--set-proxy URL] [target]
 
-### Uninstall
+XSINT - OSINT Switchblade
 
-```bash
-pip uninstall xsint
+positional arguments:
+  target                Target to scan
+
+options:
+  -h, --help            show this help message and exit
+  --list, -l            List supported input types and API key status
+  --list-modules [TYPE]
+                        List modules for an input type (e.g. --list-modules email)
+  --set-key ARGS [ARGS ...]
+                        Set an API key (e.g. 'hibp YOUR_KEY') or setup a module (e.g. 'haxalot')
+  --proxy URL           Proxy URL (e.g. socks5://127.0.0.1:9050)
+  --set-proxy URL       Save a default proxy URL
+
 ```
 
 ## Usage
@@ -83,85 +123,63 @@ xsint --set-key hibp YOUR_HIBP_KEY
 xsint --set-key 9ghz YOUR_9GHZ_KEY
 ```
 
-Or use environment variables:
-
-```bash
-export XSINT_HIBP_API_KEY=your_key
-export XSINT_9GHZ_API_KEY=your_key
-```
-
 Check key status:
 
 ```bash
 xsint --list
 ```
 
+There is another module that requires login which is the haxalot bot on telegram
+to set it run:
+```bash
+xsint --set-key haxalot
+```
+
 ## Modules
 
-List all modules:
+Heres a list of all supported modules and inputs currently.
 
 ```bash
-xsint --list-modules
-xsint --list-modules email
+ xsint --list-modules
+
+EMAIL 6/7 modules
+  + email_basic: mx records
+  + ghunt_lookup: gaia_id, profile, services, maps, calendar
+  + gitfive_module: email, profile_info, ssh_keys
+  + haxalot_module: breaches, passwords, pii
+  x hibp: breaches, breach names, breach dates (requires hibp key)
+  + intelx: breaches, leaks, pastes, documents
+  + nineghz: breaches
+PHONE 5/6 modules
+  + ghunt_lookup: gaia_id, profile, services, maps, calendar
+  + haxalot_module: breaches, passwords, pii
+  x hibp: breaches, breach names, breach dates (requires hibp key)
+  + intelx: breaches, leaks, pastes, documents
+  + nineghz: breaches
+  + phone_basic: formats, country, carrier, line type, timezone
+USERNAME 4/5 modules
+  + gitfive_module: email, profile_info, ssh_keys
+  + haxalot_module: breaches, passwords, pii
+  x hibp: breaches, breach names, breach dates (requires hibp key)
+  + intelx: breaches, leaks, pastes, documents
+  + nineghz: breaches
+IP 3 modules
+  + haxalot_module: breaches, passwords, pii
+  + ip_basic: version, private/public
+  + nineghz: breaches
+HASH 2 modules
+  + hibp: breaches, breach names, breach dates
+  + nineghz: breaches
+NAME 1 modules
+  + nineghz: breaches
+ID 1 modules
+  + nineghz: breaches
+SSN 1 modules
+  + nineghz: breaches
+PASSPORT 1 modules
+  + nineghz: breaches
+ADDRESS 1 modules
+  + osm: address, coordinates, location type
 ```
 
-Modules are self-describing `.py` files in `xsint/modules/`. Each declares an `INFO` dict:
-
-```python
-INFO = {
-    "free": ["hash"],                        # works without a key
-    "paid": ["email", "username", "phone"],  # requires api key
-    "api_key": "hibp",
-    "returns": ["breaches", "breach names", "breach dates"],
-}
-
-async def run(session, target):
-    ...
-```
-
-| Module | Types | Key |
-|--------|-------|-----|
-| `hibp` | hash (free), email/username/phone (key) | [haveibeenpwned.com/API/Key](https://haveibeenpwned.com/API/Key) |
-| `nineghz` | email, username, phone, ip, hash, name, id, ssn, passport | optional ([9ghz.com](https://9ghz.com)) |
-| `email_basic` | email | none |
-| `phone_basic` | phone | none |
-| `ip_basic` | ip | none |
-| `osm` | address | none |
-
-## Proxy
-
-```bash
-# One-time
-xsint --proxy socks5://127.0.0.1:9050 email:user@example.com
-
-# Save default
-xsint --set-proxy socks5://127.0.0.1:9050
-
-# Clear
-xsint --set-proxy off
-```
-
-Supports HTTP, SOCKS4, and SOCKS5. SSL verification is disabled when proxying.
-
-## Writing a Module
-
-Create a `.py` file in `xsint/modules/`:
-
-```python
-INFO = {
-    "free": ["email"],
-    "returns": ["some data"],
-}
-
-async def run(session, target):
-    # session is an aiohttp.ClientSession
-    # target is the cleaned input string
-    # return (status, [results])
-    #   status: 0 = success, 1 = failure
-    #   results: list of {"label", "value", "source", "risk"}
-    return 0, [
-        {"label": "Example", "value": "data", "source": "MyModule", "risk": "low"}
-    ]
-```
-
-That's it. No registration, no base classes. The engine discovers it automatically.
+Thanks to the creators of claude ai, opencode, mxrch(ghunt & gitfive), intelx, hibp, and nineghz for making this tool possible.
