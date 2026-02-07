@@ -1,4 +1,4 @@
-**XSINT** — a minimal OSINT tool.
+**XSINT** — a modern OSINT tool.
 
 ![preview](preview.png)
 
