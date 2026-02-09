@@ -2,7 +2,9 @@
   <a href="https://github.com/memorypudding/xsint"><img src="preview.png" width="700" title="xsint preview"></a>
 </h1>
 
-[![platforms](https://img.shields.io/badge/platforms-Windows%20%7C%20Linux%20%7C%20OSX-success.svg)](https://github.com/memorypudding/xsint) [![Python Version](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://www.python.org/) [![License](https://img.shields.io/badge/license-MIT-green.svg)](https://github.com/memorypudding/xsint)
+[![platforms](https://img.shields.io/badge/platforms-Windows%20%7C%20Linux%20%7C%20OSX-success.svg)](https://github.com/memorypudding/xsint) [![Python Version](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://www.python.org/) [![License](https://img.shields.io/badge/license-MIT-green.svg)](https://github.com/memorypudding/xsint) [![Version](https://img.shields.io/badge/version-0.1.0-orange.svg)](https://github.com/memorypudding/xsint)
+
+> :construction: **Prototype — work in progress.** Expect breaking changes and incomplete features.
 
 **xsint** is a modern OSINT toolkit that queries [multiple reconnaissance services](#apis) from a single command. Supports emails, phone numbers, usernames, IPs, hashes, names, and more.
 
@@ -239,4 +241,4 @@ $ xsint --list
 * [HaveIBeenPwned](https://haveibeenpwned.com/) by Troy Hunt
 * [9Ghz](https://9ghz.com/) for breach data
 * [Anthropic](https://anthropic.com/) for Claude AI
-* [opencode](https://github.com/opencode-ai/opencode) for development tooling
+* [opencode](https://github.com/anomalyco/opencode) for development tooling
