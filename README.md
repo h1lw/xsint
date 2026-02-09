@@ -1,75 +1,31 @@
-<h1 align="center">
-  <a href="https://github.com/memorypudding/xsint"><img src="preview.png" width="700" title="xsint preview"></a>
-</h1>
+<p align="center">
+  <a href="https://github.com/memorypudding/xsint">
+    <img src="preview.png" width="700" alt="xsint preview">
+  </a>
+</p>
+<p align="center">A modern OSINT toolkit.</p>
+<p align="center">
+  <a href="https://github.com/memorypudding/xsint"><img alt="platforms" src="https://img.shields.io/badge/platforms-Windows%20%7C%20Linux%20%7C%20OSX-success.svg" /></a>
+  <a href="https://www.python.org/"><img alt="Python" src="https://img.shields.io/badge/python-3.8%2B-blue.svg" /></a>
+  <a href="https://github.com/memorypudding/xsint"><img alt="Version" src="https://img.shields.io/badge/version-0.1.0-orange.svg" /></a>
+  <a href="https://github.com/memorypudding/xsint"><img alt="License" src="https://img.shields.io/badge/license-MIT-green.svg" /></a>
+</p>
 
-[![platforms](https://img.shields.io/badge/platforms-Windows%20%7C%20Linux%20%7C%20OSX-success.svg)](https://github.com/memorypudding/xsint) [![Python Version](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://www.python.org/) [![License](https://img.shields.io/badge/license-MIT-green.svg)](https://github.com/memorypudding/xsint) [![Version](https://img.shields.io/badge/version-0.1.0-orange.svg)](https://github.com/memorypudding/xsint)
+> **Prototype — work in progress.** Expect breaking changes and incomplete features.
 
-> :construction: **Prototype — work in progress.** Expect breaking changes and incomplete features.
-
-**xsint** is a modern OSINT toolkit that queries [multiple reconnaissance services](#apis) from a single command. Supports emails, phone numbers, usernames, IPs, hashes, names, and more.
-
-----
-
-## :book: Table of Contents
-
-- [Features](#tangerine-features)
-  - [APIs](#apis)
-- [Installation](#tangerine-installation)
-- [Usage](#tangerine-usage)
-- [Usage Examples](#tangerine-usage-examples)
-- [Modules](#tangerine-modules)
-- [API Keys & Module Setup](#tangerine-api-keys--module-setup)
-- [Thanks & Credits](#tangerine-thanks--credits)
-
-----
-
-## :tangerine: Features
-
-* :mag_right: Auto-detection of input type (email, IP, phone)
-* :label: Explicit type prefixes for advanced queries (`user:`, `hash:`, `ssn:`, `passport:`, etc.)
-* :package: Simple install via `pip` or run directly with `python3 -m xsint`
-* :globe_with_meridians: DNS & MX record lookups
-* :detective: Google account discovery via GHunt
-* :octopus: GitHub profile & email resolution via GitFive
-* :fire: Breach data from multiple sources (9Ghz, HIBP, IntelX, Haxalot)
-* :telephone_receiver: Phone number parsing (country, carrier, line type, timezone)
-* :earth_africa: Address geocoding via OpenStreetMap
-* :key: Configurable API keys with persistent storage
-* :shield: Proxy support (SOCKS5, HTTP)
-* :zap: Async module execution for speed
+**xsint** queries [multiple reconnaissance services](#apis) from a single command. Supports emails, phone numbers, usernames, IPs, hashes, names, and more.
 
 ---
 
-### :package: Install from source
+### Installation
 
 ```bash
-git clone https://github.com/memorypudding/xsint.git && cd xsint && pip install .
+git clone https://github.com/memorypudding/xsint.git
+cd xsint
+pip install .
 ```
 
------
-
-### APIs
-
-| Service | Functions | Status |
-|-|-|-|
-| [9Ghz](https://9ghz.com/) | Breach count, breach names & dates | :white_check_mark: :key: |
-| [HaveIBeenPwned](https://haveibeenpwned.com/) | Breach names, breach dates | :white_check_mark: :key: |
-| [IntelX](https://intelx.io/) | Breaches, leaks, pastes, documents | :white_check_mark: :key: |
-| [GHunt](https://github.com/mxrch/GHunt) | Gaia ID, profile, services, maps, calendar | :white_check_mark: |
-| [GitFive](https://github.com/mxrch/GitFive) | Email resolution, GitHub profile, SSH keys | :white_check_mark: |
-| Haxalot (Telegram bot) | Breaches, passwords, PII | :white_check_mark: :key: |
-| MX / DNS Lookup | Mail server, provider detection | :white_check_mark: |
-| Phone Basic | Country, carrier, line type, timezone | :white_check_mark: |
-| IP Basic | Version, private/public | :white_check_mark: |
-| OSM Geocoding | Address, coordinates, location type | :white_check_mark: |
-
-*:key: - API key required*
-
------
-
-## :tangerine: Installation
-
-#### No install (run directly)
+Or run directly without installing:
 
 ```bash
 git clone https://github.com/memorypudding/xsint.git
@@ -78,24 +34,41 @@ pip install -r requirements.txt
 python3 -m xsint
 ```
 
-#### pip (from source)
-
-```bash
-git clone https://github.com/memorypudding/xsint.git
-cd xsint
-pip install .
-```
-
 After installing, the `xsint` command is available globally.
 
------
+### Features
 
-## :tangerine: Usage
+- Auto-detection of input type (email, IP, phone)
+- Explicit type prefixes for advanced queries (`user:`, `hash:`, `ssn:`, `passport:`, etc.)
+- DNS & MX record lookups
+- Google account discovery via GHunt
+- GitHub profile & email resolution via GitFive
+- Breach data from multiple sources (9Ghz, HIBP, IntelX, Haxalot)
+- Phone number parsing (country, carrier, line type, timezone)
+- Address geocoding via OpenStreetMap
+- Configurable API keys with persistent storage
+- Proxy support (SOCKS5, HTTP)
+- Async module execution
 
-```bash
+### APIs
+
+| Service | Functions | Status |
+|-|-|-|
+| [9Ghz](https://9ghz.com/) | Breach count, breach names & dates | Available (key required) |
+| [HaveIBeenPwned](https://haveibeenpwned.com/) | Breach names, breach dates | Available (key required) |
+| [IntelX](https://intelx.io/) | Breaches, leaks, pastes, documents | Available (key required) |
+| [GHunt](https://github.com/mxrch/GHunt) | Gaia ID, profile, services, maps, calendar | Available (setup required) |
+| [GitFive](https://github.com/mxrch/GitFive) | Email resolution, GitHub profile, SSH keys | Available (setup required) |
+| Haxalot (Telegram bot) | Breaches, passwords, PII | Available (key required) |
+| MX / DNS Lookup | Mail server, provider detection | Available |
+| Phone Basic | Country, carrier, line type, timezone | Available |
+| IP Basic | Version, private/public | Available |
+| OSM Geocoding | Address, coordinates, location type | Available |
+
+### Usage
+
+```
 usage: xsint [-h] [--list] [--list-modules [TYPE]] [--set-key ARGS [ARGS ...]] [--proxy URL] [--set-proxy URL] [target]
-
-XSINT - OSINT Switchblade
 
 positional arguments:
   target                Target to scan
@@ -103,60 +76,35 @@ positional arguments:
 options:
   -h, --help            show this help message and exit
   --list, -l            List supported input types and API key status
-  --list-modules [TYPE]
-                        List modules for an input type (e.g. --list-modules email)
-  --set-key ARGS [ARGS ...]
-                        Set an API key (e.g. 'hibp YOUR_KEY') or setup a module (e.g. 'haxalot')
+  --list-modules [TYPE] List modules for an input type (e.g. --list-modules email)
+  --set-key ARGS        Set an API key (e.g. 'hibp YOUR_KEY') or setup a module (e.g. 'haxalot')
   --proxy URL           Proxy URL (e.g. socks5://127.0.0.1:9050)
   --set-proxy URL       Save a default proxy URL
 ```
 
------
-
-## :tangerine: Usage Examples
-
-###### Query a single email
+##### Examples
 
 ```bash
-$ xsint user@example.com
+# Auto-detection
+xsint user@example.com
+xsint 8.8.8.8
+xsint +14155551234
+
+# Explicit type prefix
+xsint email:user@example.com
+xsint phone:+14155551234
+xsint user:johndoe
+xsint ip:8.8.8.8
+xsint "name:John Doe"
+xsint "addr:Tokyo, Japan"
+xsint hash:5f4dcc3b
+xsint id:1234567890
+
+# With proxy
+xsint --proxy socks5://127.0.0.1:9050 user@example.com
 ```
 
-###### Query with explicit type prefix
-
-```bash
-$ xsint email:user@example.com
-$ xsint phone:+14155551234
-$ xsint user:johndoe
-$ xsint ip:8.8.8.8
-$ xsint "name:John Doe"
-$ xsint "addr:Tokyo, Japan"
-$ xsint hash:5f4dcc3b
-$ xsint id:1234567890
-```
-
-###### Auto-detection (emails, IPs, phone numbers)
-
-```bash
-$ xsint user@example.com
-$ xsint 8.8.8.8
-$ xsint +14155551234
-```
-
-###### Use a proxy
-
-```bash
-$ xsint --proxy socks5://127.0.0.1:9050 user@example.com
-```
-
-###### Save a default proxy
-
-```bash
-$ xsint --set-proxy socks5://127.0.0.1:9050
-```
-
------
-
-## :tangerine: Modules
+### Modules
 
 ```
 EMAIL          6/7 modules
@@ -199,46 +147,32 @@ PASSPORT       1 module  —  nineghz
 ADDRESS        1 module  —  osm
 ```
 
------
-
-## :tangerine: API Keys & Module Setup
-
-Some modules require API keys. Set them with:
+### API Keys & Module Setup
 
 ```bash
-$ xsint --set-key hibp YOUR_HIBP_KEY
-$ xsint --set-key 9ghz YOUR_9GHZ_KEY
+# Set API keys
+xsint --set-key hibp YOUR_HIBP_KEY
+xsint --set-key 9ghz YOUR_9GHZ_KEY
+
+# Haxalot (Telegram login)
+xsint --set-key haxalot
+
+# Check key status
+xsint --list
 ```
 
-The Haxalot module requires a Telegram login:
+[GHunt](https://github.com/mxrch/GHunt) and [GitFive](https://github.com/mxrch/GitFive) require their own setup before they can be used with xsint:
 
 ```bash
-$ xsint --set-key haxalot
+ghunt login
+gitfive login
 ```
 
-[GHunt](https://github.com/mxrch/GHunt) and [GitFive](https://github.com/mxrch/GitFive) require their own setup before they can be used with xsint. Follow their respective installation guides:
+### Thanks & Credits
 
-```bash
-# GHunt setup
-$ ghunt login
-
-# GitFive setup
-$ gitfive login
-```
-
-Check key status:
-
-```bash
-$ xsint --list
-```
-
------
-
-## :tangerine: Thanks & Credits
-
-* [mxrch](https://github.com/mxrch) for [GHunt](https://github.com/mxrch/GHunt) & [GitFive](https://github.com/mxrch/GitFive)
-* [IntelX](https://intelx.io) for their API
-* [HaveIBeenPwned](https://haveibeenpwned.com/) by Troy Hunt
-* [9Ghz](https://9ghz.com/) for breach data
-* [Anthropic](https://anthropic.com/) for Claude AI
-* [opencode](https://github.com/anomalyco/opencode) for development tooling
+- [mxrch](https://github.com/mxrch) for [GHunt](https://github.com/mxrch/GHunt) & [GitFive](https://github.com/mxrch/GitFive)
+- [IntelX](https://intelx.io) for their API
+- [HaveIBeenPwned](https://haveibeenpwned.com/) by Troy Hunt
+- [9Ghz](https://9ghz.com/) for breach data
+- [Anthropic](https://anthropic.com/) for Claude AI
+- [opencode](https://github.com/anomalyco/opencode) for development tooling
