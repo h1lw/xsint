@@ -4,7 +4,7 @@
 
 [![platforms](https://img.shields.io/badge/platforms-Windows%20%7C%20Linux%20%7C%20OSX-success.svg)](https://github.com/memorypudding/xsint) [![Python Version](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://www.python.org/) [![License](https://img.shields.io/badge/license-MIT-green.svg)](https://github.com/memorypudding/xsint)
 
-**xsint** is a modern OSINT switchblade that queries [multiple reconnaissance services](#apis) from a single command. Supports emails, phone numbers, usernames, IPs, hashes, names, and more.
+**xsint** is a modern OSINT toolkit that queries [multiple reconnaissance services](#apis) from a single command. Supports emails, phone numbers, usernames, IPs, hashes, names, and more.
 
 ----
 
