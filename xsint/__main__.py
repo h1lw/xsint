@@ -13,10 +13,10 @@ from .modules import haxalot_module
 
 console = Console()
 
-PIPX_TOOLS = {
-    "ghunt": "ghunt",
-    "gitfive": "gitfive",
-}
+PIPX_TOOLS = [
+    {"name": "ghunt", "package": "ghunt"},
+    {"name": "gitfive", "package": "gitfive", "extra_args": ["--include-deps"]},
+]
 
 
 def _run_setup():
@@ -66,12 +66,12 @@ def _run_setup():
 
     console.print(f"[dim]Using interpreter: {python_bin}[/dim]\n")
 
-    for name, package in PIPX_TOOLS.items():
+    for tool in PIPX_TOOLS:
+        name = tool["name"]
         console.print(f"[bold cyan]Installing {name}...[/bold cyan]")
-        result = subprocess.run(
-            [pipx, "install", package, "--python", python_bin],
-            capture_output=False,
-        )
+        cmd = [pipx, "install", tool["package"], "--python", python_bin]
+        cmd.extend(tool.get("extra_args", []))
+        result = subprocess.run(cmd, capture_output=False)
         if result.returncode == 0:
             console.print(f"[bold green]{name} installed successfully.[/bold green]\n")
         else:
