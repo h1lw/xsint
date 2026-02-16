@@ -7,7 +7,7 @@ import sys
 # This lets `python3.13 -m xsint --setup` work even when deps aren't installed yet.
 
 def _run_setup():
-    """Install xsint dependencies, ghunt, and gitfive."""
+    """Create a venv, install xsint + ghunt + gitfive, and set up CLI tools."""
     major, minor = sys.version_info[:2]
     print(f"Current Python: {sys.executable} ({major}.{minor})\n")
 
@@ -21,13 +21,27 @@ def _run_setup():
         print("      python3.13 -m xsint --setup")
         return
 
-    # Step 1: Install xsint's own requirements
-    req_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "requirements.txt")
-    req_path = os.path.normpath(req_path)
+    project_root = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+    venv_dir = os.path.join(project_root, ".venv")
+    venv_python = os.path.join(venv_dir, "bin", "python")
+    req_path = os.path.join(project_root, "requirements.txt")
+
+    # Step 1: Create venv if it doesn't exist
+    if not os.path.exists(venv_python):
+        print(f"Creating virtual environment at {venv_dir}...")
+        result = subprocess.run([sys.executable, "-m", "venv", venv_dir])
+        if result.returncode != 0:
+            print("[!] Failed to create virtual environment.")
+            return
+        print()
+    else:
+        print(f"Using existing venv: {venv_dir}\n")
+
+    # Step 2: Install xsint's own requirements into the venv
     if os.path.exists(req_path):
         print("Installing xsint dependencies...")
         result = subprocess.run(
-            [sys.executable, "-m", "pip", "install", "-r", req_path],
+            [venv_python, "-m", "pip", "install", "-r", req_path],
             capture_output=False,
         )
         if result.returncode != 0:
@@ -35,12 +49,22 @@ def _run_setup():
             return
         print()
 
-    # Step 2: Install ghunt via pipx (for the `ghunt login` CLI)
+    # Step 3: Install ghunt + gitfive into the venv
+    print("Installing ghunt + gitfive...")
+    result = subprocess.run(
+        [venv_python, "-m", "pip", "install", "ghunt", "gitfive"],
+        capture_output=False,
+    )
+    if result.returncode != 0:
+        print("\n[!] Failed to install ghunt/gitfive.")
+        return
+    print()
+
+    # Step 4: Install ghunt via pipx (for the `ghunt login` CLI command)
     pipx = shutil.which("pipx")
     if not pipx:
-        print("[!] pipx is not installed.")
-        print("    Install it with: pip install pipx")
-        print("    Skipping pipx install of ghunt (CLI only).\n")
+        print("[!] pipx is not installed. Skipping ghunt CLI install.")
+        print("    Install it with: brew install pipx\n")
     else:
         print("Installing ghunt CLI (via pipx)...")
         subprocess.run(
@@ -49,18 +73,7 @@ def _run_setup():
         )
         print()
 
-    # Step 3: Install ghunt + gitfive as libraries (via pip)
-    print("Installing ghunt + gitfive libraries (via pip)...")
-    result = subprocess.run(
-        [sys.executable, "-m", "pip", "install", "ghunt", "gitfive"],
-        capture_output=False,
-    )
-    if result.returncode != 0:
-        print("\n[!] Failed to install ghunt/gitfive libraries.")
-        return
-    print()
-
-    # Step 4: Prompt to log in
+    # Step 5: Prompt to log in
     login_cmds = [
         ("ghunt", ["ghunt", "login"]),
         ("gitfive", ["gitfive", "login"]),
@@ -73,6 +86,12 @@ def _run_setup():
             break
         if answer in ("y", "yes"):
             subprocess.run(cmd)
+
+    print("\nSetup complete. Run xsint with:")
+    print(f"  {venv_python} -m xsint <target>")
+    print("\n  Or activate the venv first:")
+    print(f"  source {venv_dir}/bin/activate")
+    print("  xsint <target>")
 
 
 if "--setup" in sys.argv:

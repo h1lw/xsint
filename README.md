@@ -22,19 +22,26 @@
 ```bash
 git clone https://github.com/memorypudding/xsint.git
 cd xsint
-pip install .
+
+# One-command setup (creates a venv, installs everything)
+python3.13 -m xsint --setup
+
+# Then activate the venv and run
+source .venv/bin/activate
+xsint <target>
 ```
 
-Or run directly without installing:
+Or install manually:
 
 ```bash
 git clone https://github.com/memorypudding/xsint.git
 cd xsint
+python3.13 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
+pip install ghunt gitfive
 python3 -m xsint
 ```
-
-After installing, the `xsint` command is available globally.
 
 ### Features
 
