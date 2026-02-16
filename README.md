@@ -162,15 +162,15 @@ xsint --set-key haxalot
 xsint --list
 ```
 
-[GHunt](https://github.com/mxrch/GHunt) and [GitFive](https://github.com/mxrch/GitFive) require **Python 3.10+** and must be installed separately via [pipx](https://pipx.pypa.io/):
+[GHunt](https://github.com/mxrch/GHunt) and [GitFive](https://github.com/mxrch/GitFive) require **Python 3.10-3.13** and must be installed separately:
 
 ```bash
-# Automatic — installs both tools via pipx
-xsint --setup
+# Automatic — run under a compatible Python
+python3.13 -m xsint --setup
 
 # Or install manually
-pipx install ghunt --python python3.10
-pipx install gitfive --python python3.10
+pipx install ghunt --python python3.13
+pip install ghunt gitfive
 
 # Then log in to each tool
 ghunt login

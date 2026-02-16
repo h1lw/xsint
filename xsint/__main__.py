@@ -13,87 +13,71 @@ from .modules import haxalot_module
 
 console = Console()
 
-PIPX_TOOLS = [
+SETUP_TOOLS = [
     {"name": "ghunt", "package": "ghunt"},
-    {"name": "gitfive", "package": "gitfive", "extra_args": ["--include-deps"]},
+    {"name": "gitfive", "package": "gitfive"},
 ]
 
 
 def _run_setup():
-    """Install ghunt and gitfive via pipx with Python 3.10+."""
-    # Check for pipx
+    """Install ghunt and gitfive via pipx (CLI) and pip (library)."""
+    major, minor = sys.version_info[:2]
+    console.print(f"[dim]Current Python: {sys.executable} ({major}.{minor})[/dim]\n")
+
+    if not (10 <= minor <= 13 and major == 3):
+        reason = "too old" if minor < 10 else "too new — deps don't support it yet"
+        console.print(f"[bold red][!] Python {major}.{minor} is {reason}.[/bold red]")
+        console.print("    GHunt and GitFive require Python 3.10 to 3.13.")
+        console.print("\n    [cyan]Install a compatible version:[/cyan]")
+        console.print("      brew install python@3.13")
+        console.print("\n    [cyan]Then re-run xsint under it:[/cyan]")
+        console.print("      python3.13 -m xsint --setup")
+        return
+
+    # Install ghunt via pipx (it has a CLI entry point for `ghunt login`)
     pipx = shutil.which("pipx")
     if not pipx:
         console.print("[bold red][!] pipx is not installed.[/bold red]")
         console.print("    Install it with: [cyan]pip install pipx[/cyan]")
         return
 
-    # Find a suitable Python 3.10-3.13 interpreter
-    # Python 3.14+ is too new — compiled deps (pillow, levenshtein) don't support it yet
-    python_bin = None
-    found_versions = []
-    for candidate in ("python3.10", "python3.11", "python3.12", "python3.13", "python3"):
-        path = shutil.which(candidate)
-        if not path:
-            continue
-        try:
-            out = subprocess.check_output([path, "--version"], text=True).strip()
-            # e.g. "Python 3.12.1"
-            version_str = out.split()[1]
-            parts = version_str.split(".")
-            major, minor = int(parts[0]), int(parts[1])
-            found_versions.append((path, major, minor, version_str))
-            if major == 3 and 10 <= minor <= 13:
-                python_bin = path
-                break
-        except Exception:
-            continue
+    console.print("[bold cyan]Installing ghunt (via pipx)...[/bold cyan]")
+    result = subprocess.run(
+        [pipx, "install", "ghunt", "--python", sys.executable, "--force"],
+        capture_output=False,
+    )
+    ghunt_ok = result.returncode == 0
+    if ghunt_ok:
+        console.print(f"[bold green]ghunt installed successfully.[/bold green]\n")
+    else:
+        console.print(f"[bold red]ghunt installation failed.[/bold red]\n")
 
-    if not python_bin:
-        console.print("[bold red][!] No compatible Python interpreter found.[/bold red]")
-        console.print("    GHunt and GitFive require Python 3.10 to 3.13.")
-        if found_versions:
-            console.print("\n    [yellow]Detected interpreters:[/yellow]")
-            for path, major, minor, ver in found_versions:
-                reason = ""
-                if minor < 10:
-                    reason = " [dim](too old)[/dim]"
-                elif minor > 13:
-                    reason = " [dim](too new — deps don't support it yet)[/dim]"
-                console.print(f"      {path}: Python {ver}{reason}")
-        console.print("\n    Install a compatible version with: [cyan]brew install python@3.13[/cyan]")
+    # Install both ghunt and gitfive as libraries into xsint's environment
+    # so they can be imported at runtime
+    console.print("[bold cyan]Installing ghunt + gitfive libraries (via pip)...[/bold cyan]")
+    result = subprocess.run(
+        [sys.executable, "-m", "pip", "install", "ghunt", "gitfive"],
+        capture_output=False,
+    )
+    if result.returncode == 0:
+        console.print(f"[bold green]Libraries installed successfully.[/bold green]\n")
+    else:
+        console.print(f"[bold red]Library installation failed.[/bold red]\n")
         return
 
-    console.print(f"[dim]Using interpreter: {python_bin}[/dim]\n")
-
-    installed = []
-    for tool in PIPX_TOOLS:
-        name = tool["name"]
-        console.print(f"[bold cyan]Installing {name}...[/bold cyan]")
-        cmd = [pipx, "install", tool["package"], "--python", python_bin]
-        cmd.extend(tool.get("extra_args", []))
-        result = subprocess.run(cmd, capture_output=False)
-        if result.returncode == 0:
-            console.print(f"[bold green]{name} installed successfully.[/bold green]\n")
-            installed.append(name)
-        else:
-            console.print(f"[bold red]{name} installation failed.[/bold red]\n")
-
-    # Prompt to log in to installed tools
-    login_cmds = {
-        "ghunt": ["ghunt", "login"],
-        "gitfive": ["gitfive", "login"],
-    }
-    for name in installed:
-        if name not in login_cmds:
-            continue
+    # Prompt to log in
+    login_cmds = [
+        ("ghunt", ["ghunt", "login"]),
+        ("gitfive", ["gitfive", "login"]),
+    ]
+    for name, cmd in login_cmds:
         try:
             answer = console.input(f"[bold yellow]Log in to {name} now? (y/n): [/bold yellow]").strip().lower()
         except (EOFError, KeyboardInterrupt):
             console.print()
             break
         if answer in ("y", "yes"):
-            subprocess.run(login_cmds[name])
+            subprocess.run(cmd)
 
 
 def main():
