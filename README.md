@@ -57,8 +57,8 @@ After installing, the `xsint` command is available globally.
 | [9Ghz](https://9ghz.com/) | Breach count, breach names & dates | Available (key required) |
 | [HaveIBeenPwned](https://haveibeenpwned.com/) | Breach names, breach dates | Available (key required) |
 | [IntelX](https://intelx.io/) | Breaches, leaks, pastes, documents | Available (key required) |
-| [GHunt](https://github.com/mxrch/GHunt) | Gaia ID, profile, services, maps, calendar | Available (setup required) |
-| [GitFive](https://github.com/mxrch/GitFive) | Email resolution, GitHub profile, SSH keys | Available (setup required) |
+| [GHunt](https://github.com/mxrch/GHunt) | Gaia ID, profile, services, maps, calendar | Available (pipx, Python 3.10+) |
+| [GitFive](https://github.com/mxrch/GitFive) | Email resolution, GitHub profile, SSH keys | Available (pipx, Python 3.10+) |
 | Haxalot (Telegram bot) | Breaches, passwords, PII | Available (key required) |
 | MX / DNS Lookup | Mail server, provider detection | Available |
 | Phone Basic | Country, carrier, line type, timezone | Available |
@@ -68,7 +68,7 @@ After installing, the `xsint` command is available globally.
 ### Usage
 
 ```
-usage: xsint [-h] [--list] [--list-modules [TYPE]] [--set-key ARGS [ARGS ...]] [--proxy URL] [--set-proxy URL] [target]
+usage: xsint [-h] [--list] [--list-modules [TYPE]] [--set-key ARGS [ARGS ...]] [--setup] [--proxy URL] [--set-proxy URL] [target]
 
 positional arguments:
   target                Target to scan
@@ -78,6 +78,7 @@ options:
   --list, -l            List supported input types and API key status
   --list-modules [TYPE] List modules for an input type (e.g. --list-modules email)
   --set-key ARGS        Set an API key (e.g. 'hibp YOUR_KEY') or setup a module (e.g. 'haxalot')
+  --setup               Install external tools (GHunt, GitFive) via pipx
   --proxy URL           Proxy URL (e.g. socks5://127.0.0.1:9050)
   --set-proxy URL       Save a default proxy URL
 ```
@@ -161,9 +162,17 @@ xsint --set-key haxalot
 xsint --list
 ```
 
-[GHunt](https://github.com/mxrch/GHunt) and [GitFive](https://github.com/mxrch/GitFive) require their own setup before they can be used with xsint:
+[GHunt](https://github.com/mxrch/GHunt) and [GitFive](https://github.com/mxrch/GitFive) require **Python 3.10+** and must be installed separately via [pipx](https://pipx.pypa.io/):
 
 ```bash
+# Automatic — installs both tools via pipx
+xsint --setup
+
+# Or install manually
+pipx install ghunt --python python3.10
+pipx install gitfive --python python3.10
+
+# Then log in to each tool
 ghunt login
 gitfive login
 ```

@@ -7,11 +7,16 @@ import hashlib
 from contextlib import redirect_stdout
 from types import SimpleNamespace
 
-# GHunt Imports
-from ghunt.helpers import auth, playgames, gmaps, calendar as gcalendar
-from ghunt.apis.peoplepa import PeoplePaHttp
-from ghunt import config as ghunt_config
 from xsint.config import get_config
+
+# GHunt requires Python 3.10+ and must be installed separately via pipx
+try:
+    from ghunt.helpers import auth, playgames, gmaps, calendar as gcalendar
+    from ghunt.apis.peoplepa import PeoplePaHttp
+    from ghunt import config as ghunt_config
+    GHUNT_AVAILABLE = True
+except ImportError:
+    GHUNT_AVAILABLE = False
 
 INFO = {
     "free": [],
@@ -56,6 +61,15 @@ async def get_gmaps_profile(client, gaia_id):
 async def run(session, target):
     results = []
     PARENT = "GHunt"
+
+    if not GHUNT_AVAILABLE:
+        return 1, [{
+            "label": "Not Installed",
+            "value": "GHunt requires Python 3.10+ and must be installed via pipx: pipx install ghunt --python python3.10",
+            "source": PARENT,
+            "risk": "low",
+        }]
+
     config = get_config()
     proxy = config.get("proxy")
     proxies = {"http://": proxy, "https://": proxy} if proxy else None

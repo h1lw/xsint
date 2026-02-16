@@ -13,8 +13,6 @@ setup(
         "geopy",
         "hashid",
         "httpx",
-        "gitfive",
-        "ghunt",
         "intelx",
     ],
     entry_points={

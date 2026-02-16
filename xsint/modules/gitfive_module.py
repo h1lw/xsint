@@ -5,14 +5,19 @@ import json
 import sys
 import os
 from contextlib import redirect_stdout, redirect_stderr
-from gitfive.lib import metamon, github, emails_gen, organizations
-from gitfive.lib.domain_finder import guess_custom_domain
-from gitfive.lib.utils import delete_tmp_dir, detect_custom_domain
-from gitfive.lib.objects import GitfiveRunner
-from gitfive import config as gitfive_config
 
-# XSINT Imports
 from xsint.config import get_config
+
+# GitFive requires Python 3.10+ and must be installed separately via pipx
+try:
+    from gitfive.lib import metamon, github, emails_gen, organizations
+    from gitfive.lib.domain_finder import guess_custom_domain
+    from gitfive.lib.utils import delete_tmp_dir, detect_custom_domain
+    from gitfive.lib.objects import GitfiveRunner
+    from gitfive import config as gitfive_config
+    GITFIVE_AVAILABLE = True
+except ImportError:
+    GITFIVE_AVAILABLE = False
 
 INFO = {
     "free": [],
@@ -86,6 +91,14 @@ async def _scrape_commits(runner, repo_name, emails_index):
 async def run(session, target):
     results = []
     PARENT = "GitFive"
+
+    if not GITFIVE_AVAILABLE:
+        return 1, [{
+            "label": "Not Installed",
+            "value": "GitFive requires Python 3.10+ and must be installed via pipx: pipx install gitfive --python python3.10",
+            "source": PARENT,
+            "risk": "low",
+        }]
 
     # FIX 1: Initialize this variable BEFORE the try block
     # This prevents "cannot access local variable" errors in the 'finally' block

@@ -19,8 +19,7 @@ def print_banner():
             pass
     else:
         console.print(" [bold sea_green3]X S I N T[/] [dim]OSINT Switchblade[/]")
-    console.print(Text(" ╭─ [ SYSTEM ONLINE ]", style="dim white"))
-    console.print(Text(" │", style="dim white"))
+    console.print()
 
 def print_results(report):
     results = report.get("results", [])

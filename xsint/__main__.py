@@ -1,5 +1,7 @@
 import argparse
 import asyncio
+import shutil
+import subprocess
 import sys
 from rich.console import Console
 from .core import XsintEngine
@@ -10,6 +12,56 @@ from .ui import print_banner, print_results
 from .modules import haxalot_module
 
 console = Console()
+
+PIPX_TOOLS = {
+    "ghunt": "ghunt",
+    "gitfive": "gitfive",
+}
+
+
+def _run_setup():
+    """Install ghunt and gitfive via pipx with Python 3.10+."""
+    # Check for pipx
+    pipx = shutil.which("pipx")
+    if not pipx:
+        console.print("[bold red][!] pipx is not installed.[/bold red]")
+        console.print("    Install it with: [cyan]pip install pipx[/cyan]")
+        return
+
+    # Find a suitable Python 3.10+ interpreter
+    python_bin = None
+    for candidate in ("python3.10", "python3.11", "python3.12", "python3.13", "python3"):
+        path = shutil.which(candidate)
+        if not path:
+            continue
+        try:
+            out = subprocess.check_output([path, "--version"], text=True).strip()
+            # e.g. "Python 3.12.1"
+            parts = out.split()[1].split(".")
+            major, minor = int(parts[0]), int(parts[1])
+            if major >= 3 and minor >= 10:
+                python_bin = path
+                break
+        except Exception:
+            continue
+
+    if not python_bin:
+        console.print("[bold red][!] No Python 3.10+ interpreter found.[/bold red]")
+        console.print("    GHunt and GitFive require Python 3.10 or newer.")
+        return
+
+    console.print(f"[dim]Using interpreter: {python_bin}[/dim]\n")
+
+    for name, package in PIPX_TOOLS.items():
+        console.print(f"[bold cyan]Installing {name}...[/bold cyan]")
+        result = subprocess.run(
+            [pipx, "install", package, "--python", python_bin],
+            capture_output=False,
+        )
+        if result.returncode == 0:
+            console.print(f"[bold green]{name} installed successfully.[/bold green]\n")
+        else:
+            console.print(f"[bold red]{name} installation failed.[/bold red]\n")
 
 
 def main():
@@ -37,6 +89,11 @@ def main():
         help="Set an API key (e.g. 'hibp YOUR_KEY') or setup a module (e.g. 'haxalot')",
     )
     
+    parser.add_argument(
+        "--setup",
+        action="store_true",
+        help="Install external tools (GHunt, GitFive) via pipx",
+    )
     parser.add_argument(
         "--proxy", metavar="URL", help="Proxy URL (e.g. socks5://127.0.0.1:9050)"
     )
@@ -67,6 +124,11 @@ def main():
             console.print("  --proxy http://127.0.0.1:8080")
             console.print("  --proxy socks5://127.0.0.1:9050")
             sys.exit(1)
+
+    # --- HANDLER: --setup ---
+    if args.setup:
+        _run_setup()
+        return
 
     # --- HANDLER: --set-key ---
     if args.set_key:
