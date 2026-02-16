@@ -66,6 +66,7 @@ def _run_setup():
 
     console.print(f"[dim]Using interpreter: {python_bin}[/dim]\n")
 
+    installed = []
     for tool in PIPX_TOOLS:
         name = tool["name"]
         console.print(f"[bold cyan]Installing {name}...[/bold cyan]")
@@ -74,8 +75,25 @@ def _run_setup():
         result = subprocess.run(cmd, capture_output=False)
         if result.returncode == 0:
             console.print(f"[bold green]{name} installed successfully.[/bold green]\n")
+            installed.append(name)
         else:
             console.print(f"[bold red]{name} installation failed.[/bold red]\n")
+
+    # Prompt to log in to installed tools
+    login_cmds = {
+        "ghunt": ["ghunt", "login"],
+        "gitfive": ["gitfive", "login"],
+    }
+    for name in installed:
+        if name not in login_cmds:
+            continue
+        try:
+            answer = console.input(f"[bold yellow]Log in to {name} now? (y/n): [/bold yellow]").strip().lower()
+        except (EOFError, KeyboardInterrupt):
+            console.print()
+            break
+        if answer in ("y", "yes"):
+            subprocess.run(login_cmds[name])
 
 
 def main():
