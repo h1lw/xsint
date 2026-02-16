@@ -74,18 +74,25 @@ def _run_setup():
         print()
 
     # Step 5: Prompt to log in
+    # Prefer pipx venv binaries so they run under the correct Python
+    pipx_base = os.path.expanduser("~/.local/pipx/venvs")
     login_cmds = [
-        ("ghunt", ["ghunt", "login"]),
-        ("gitfive", ["gitfive", "login"]),
+        ("ghunt", os.path.join(pipx_base, "ghunt", "bin", "ghunt")),
+        ("gitfive", os.path.join(pipx_base, "gitfive", "bin", "gitfive")),
     ]
-    for name, cmd in login_cmds:
+    for name, pipx_bin in login_cmds:
         try:
             answer = input(f"Log in to {name} now? (y/n): ").strip().lower()
         except (EOFError, KeyboardInterrupt):
             print()
             break
         if answer in ("y", "yes"):
-            subprocess.run(cmd)
+            if os.path.isfile(pipx_bin) and os.access(pipx_bin, os.X_OK):
+                subprocess.run([pipx_bin, "login"])
+            elif shutil.which(name):
+                subprocess.run([name, "login"])
+            else:
+                print(f"  {name} CLI not found — run '{name} login' manually.")
 
     print("\nSetup complete. Run xsint with:")
     print(f"  {venv_python} -m xsint <target>")

@@ -116,14 +116,20 @@ if [[ ":$PATH:" != *":$BIN_DIR:"* ]]; then
 fi
 
 # --- Prompt to log in ---
-for tool in ghunt gitfive; do
+PIPX_GHUNT="$HOME/.local/pipx/venvs/ghunt/bin/ghunt"
+PIPX_GITFIVE="$HOME/.local/pipx/venvs/gitfive/bin/gitfive"
+
+for pair in "ghunt:$PIPX_GHUNT" "gitfive:$PIPX_GITFIVE"; do
+    tool="${pair%%:*}"
+    bin="${pair#*:}"
     read -rp "Log in to $tool now? (y/n): " answer
     if [[ "$answer" =~ ^[Yy] ]]; then
-        if command -v "$tool" &>/dev/null; then
+        if [ -x "$bin" ]; then
+            "$bin" login
+        elif command -v "$tool" &>/dev/null; then
             "$tool" login
         else
-            "$VENV_DIR/bin/$tool" login 2>/dev/null || \
-                dim "$tool login not available as a CLI command."
+            dim "$tool CLI not found — run '$tool login' manually after install."
         fi
     fi
 done
