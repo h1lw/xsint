@@ -19,7 +19,7 @@ cd xsint
 ## Command usage
 
 ```text
-usage: xsint [-h] [--list] [--modules [TYPE]] [--auth ARGS [ARGS ...]]
+usage: xsint [-h] [--modules [TYPE]] [--auth [ARGS ...]]
              [--proxy URL] [--set-proxy URL]
              [target]
 
@@ -28,12 +28,12 @@ positional arguments:
 
 optional arguments:
   -h, --help            show this help message and exit
-  --list, -l            List supported input types and API key status
   --modules [TYPE], -m [TYPE]
                         List modules for an input type (e.g. --modules email)
-  --auth ARGS [ARGS ...]
+  --auth [ARGS ...]
                         Configure credentials for a module (e.g. --auth hibp
-                        KEY, --auth ghunt, --auth haxalot)
+                        KEY, --auth ghunt, --auth haxalot). Run --auth to
+                        show auth status.
   --proxy URL           Proxy URL (e.g. socks5://127.0.0.1:9050)
   --set-proxy URL       Save a default proxy URL
 ```
@@ -80,9 +80,12 @@ Use `xsint -m <type>` to filter by input type.
 
 ## Module authentication
 
-Use `--auth` for both API keys and interactive module login/setup:
+Use `--auth` for API keys, login/setup flows, and auth status:
 
 ```bash
+# View auth status
+xsint --auth
+
 # API key based modules
 xsint --auth hibp YOUR_HIBP_KEY
 xsint --auth intelx YOUR_INTELX_KEY
