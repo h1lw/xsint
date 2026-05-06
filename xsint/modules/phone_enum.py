@@ -82,7 +82,7 @@ async def _chk_amazon(cc, num):
                 m_val = re.search(r'value="([^"]*)"', tag)
                 if m_name:
                     data[m_name.group(1)] = m_val.group(1) if m_val else ""
-            data["email"] = f"{cc}{num}"
+            data["email"] = f"+{cc}{num}"
             r2 = await client.post("https://www.amazon.com/ap/signin/", data=data, headers=headers)
             if 'id="auth-password-missing-alert"' in r2.text:
                 return (True, show_url, None)
@@ -108,7 +108,7 @@ async def _chk_instagram(cc, num):
         "login_attempt_count": "0",
         "directly_sign_in": "true",
         "source": "default",
-        "q": f"{cc}{num}",
+        "q": f"+{cc}{num}",
         "ig_sig_key_version": _IG_SIG_VER,
     })
     body = _ig_sign(payload_json)
