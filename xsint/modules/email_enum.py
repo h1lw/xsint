@@ -2843,11 +2843,32 @@ async def _chk_shopping_amazon(email: str):
             if _is_captcha(resp.text):
                 return (None, None, None)
 
-            # 3. If Amazon asks for a password, the email is registered
-            if 'id="auth-password-missing-alert"' in resp.text:
-                return (True, show_url, None)
+            # 3. Detect outcome from the rendered page.
+            # Registered: the response asks for a password.
+            # Not registered: Amazon's unified-claim flow lands on
+            # /ax/claim/intent ("Looks like you're new to Amazon") with a
+            # form posting to /ap/register.
+            text = resp.text
+            final_url = str(resp.url)
 
-            return (False, show_url, None)
+            registered_signals = (
+                'id="auth-password-missing-alert"' in text
+                or 'id="ap_password"' in text
+                or ('name="password"' in text and 'type="password"' in text)
+            )
+            not_registered_signals = (
+                "/ax/claim/intent" in final_url
+                or "Looks like you" in text and "new to Amazon" in text
+                or 'action="https://www.amazon.com:443/ap/register' in text
+                or 'action="https://www.amazon.com/ap/register' in text
+            )
+
+            if registered_signals:
+                return (True, show_url, None)
+            if not_registered_signals:
+                return (False, show_url, None)
+            # Ambiguous response — don't guess.
+            return (None, None, None)
 
     except httpx.TimeoutException:
         return (None, None, None)
