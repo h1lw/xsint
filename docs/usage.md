@@ -46,13 +46,27 @@ MISC:
 
 ## Output
 
-By default, `xsint` prints one line per module with its run status, then a summary:
+`xsint` prints one line per module with its run status, then either the findings report or a `no intel found` line:
 
 ```text
+[+] email_enum: ok
 [+] hibp: ok
 [+] nineghz: ok
-[+] haxalot_module: ok
-[!] 5 findings across 3 sources — pass --show-found to view
+
+type     : EMAIL
+findings : 5
+sources  : 3
+
+email_enum (3)
+  Mixcloud        : https://mixcloud.com
+  Spotify         : https://spotify.com
+  Pinterest       : https://pinterest.com
+
+hibp (1)
+  Breach          : LinkedIn (2012)
+
+nineghz (1)
+  Breach          : exampledb (2021)
 ```
 
 If no modules were eligible (everything was locked, e.g. no auth configured for the target type):
@@ -66,30 +80,6 @@ If modules ran but found nothing:
 ```text
 [+] ghunt_lookup: ok
 [!] no intel found
-```
-
-Pass `--show-found` to also print the full findings report after the scan:
-
-```text
-[+] hibp: ok
-[+] nineghz: ok
-[+] haxalot_module: ok
-[+] email_basic: ok
-
-type     : EMAIL
-findings : 5
-sources  : 3
-
-email_basic (1)
-  mx records      : mail.example.com
-
-hibp (3)
-  Breach          : LinkedIn (2012)
-  Breach          : Adobe (2013)
-  Paste           : pastebin.com/xyz
-
-nineghz (1)
-  Breach          : exampledb (2021)
 ```
 
 ### Module status lines

@@ -174,9 +174,6 @@ NETWORK:
   --proxy <URL>: Proxy URL for this run (http://, socks5://, ...)
                  Set XSINT_PROXY in the environment to persist.
 
-OUTPUT:
-  --show-found: Print the full findings report after the scan
-
 MISC:
   -h, --help: Print this help summary
 """
@@ -196,7 +193,6 @@ def main():
     parser.add_argument("-m", "--modules", nargs="?", const="all", metavar="TYPE")
     parser.add_argument("--auth", nargs="*", metavar="ARGS")
     parser.add_argument("--proxy", metavar="URL")
-    parser.add_argument("--show-found", action="store_true")
 
     if len(sys.argv) == 1:
         print(HELP_TEXT, end="")
@@ -302,15 +298,11 @@ async def async_main(args):
             print("[!] no eligible modules — run --auth to enable more, or check `xsint -m`")
             return
 
-        findings = len(report.get("results") or [])
-        if findings == 0:
+        if not (report.get("results") or []):
             print("[!] no intel found")
-        elif args.show_found:
+        else:
             print()
             print_results(report)
-        else:
-            sources = len({r.get("source") for r in report["results"]})
-            print(f"[!] {findings} finding{'s' if findings != 1 else ''} across {sources} source{'s' if sources != 1 else ''} — pass --show-found to view")
     finally:
         await engine.close()
 
