@@ -148,23 +148,32 @@ def copy_tree(src: Path, dst: Path) -> None:
     shutil.copytree(src, dst, dirs_exist_ok=True, ignore=ignore)
 
 
-def write_unix_wrapper(path: Path, python: str, module: str, is_gitfive: bool = False) -> None:
-    if is_gitfive:
-        content = (
-            "#!/usr/bin/env sh\n"
-            f'exec "{python}" -c "from gitfive.lib.cli import parse_args; parse_args()" "$@"\n'
-        )
-    else:
-        content = f'#!/usr/bin/env sh\nexec "{python}" -m {module} "$@"\n'
+def _wrapper_invocation(module: str) -> str:
+    """Return the python expression that boots <module>'s CLI.
+
+    `python -m <pkg>` only works when the package ships a __main__.py.
+    ghunt and gitfive don't, so we call their installed console_scripts
+    entry points directly. xsint has __main__.py and we control it,
+    so '-m xsint' is fine.
+    """
+    if module == "gitfive":
+        return '-c "from gitfive.lib.cli import parse_args; parse_args()"'
+    if module == "ghunt":
+        return '-c "import sys; from ghunt.ghunt import main; sys.exit(main() or 0)"'
+    return f"-m {module}"
+
+
+def write_unix_wrapper(path: Path, python: str, module: str) -> None:
+    content = (
+        "#!/usr/bin/env sh\n"
+        f'exec "{python}" {_wrapper_invocation(module)} "$@"\n'
+    )
     path.write_text(content, encoding="utf-8")
     path.chmod(path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
 
 
-def write_windows_wrapper(path: Path, python: str, module: str, is_gitfive: bool = False) -> None:
-    if is_gitfive:
-        content = f'@echo off\r\n"{python}" -c "from gitfive.lib.cli import parse_args; parse_args()" %*\r\n'
-    else:
-        content = f'@echo off\r\n"{python}" -m {module} %*\r\n'
+def write_windows_wrapper(path: Path, python: str, module: str) -> None:
+    content = f'@echo off\r\n"{python}" {_wrapper_invocation(module)} %*\r\n'
     path.write_text(content, encoding="utf-8")
 
 
@@ -254,14 +263,14 @@ def main() -> None:
     if os.name == "nt":
         write_windows_wrapper(bin_dir / "xsint.cmd", python, "xsint")
         write_windows_wrapper(bin_dir / "ghunt.cmd", python, "ghunt")
-        write_windows_wrapper(bin_dir / "gitfive.cmd", python, "gitfive", is_gitfive=True)
+        write_windows_wrapper(bin_dir / "gitfive.cmd", python, "gitfive")
         success(f"Installed xsint wrapper to: {bin_dir / 'xsint.cmd'}")
         success(f"Installed ghunt wrapper to: {bin_dir / 'ghunt.cmd'}")
         success(f"Installed gitfive wrapper to: {bin_dir / 'gitfive.cmd'}")
     else:
         write_unix_wrapper(bin_dir / "xsint", python, "xsint")
         write_unix_wrapper(bin_dir / "ghunt", python, "ghunt")
-        write_unix_wrapper(bin_dir / "gitfive", python, "gitfive", is_gitfive=True)
+        write_unix_wrapper(bin_dir / "gitfive", python, "gitfive")
         success(f"Installed xsint wrapper to: {bin_dir / 'xsint'}")
         success(f"Installed ghunt wrapper to: {bin_dir / 'ghunt'}")
         success(f"Installed gitfive wrapper to: {bin_dir / 'gitfive'}")
