@@ -39,6 +39,24 @@ def _validate_proxy(url):
             raise ValueError(f"proxy port out of range: {p}")
 
 
+def _proxy_reachable(url, timeout=2.0):
+    """Quick TCP probe of the proxy's host:port. Returns True if reachable."""
+    import socket
+    parsed = urlparse(url)
+    host = parsed.hostname
+    port = parsed.port
+    if port is None:
+        # Default ports for the schemes we care about.
+        port = {"http": 80, "https": 443, "socks4": 1080, "socks5": 1080}.get(parsed.scheme, 80)
+    if not host:
+        return False
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except (socket.timeout, ConnectionRefusedError, OSError):
+        return False
+
+
 def _run_external_login(service):
     service = _normalize_service(service)
     candidates = []
@@ -123,13 +141,37 @@ def _print_auth_status():
     _print_table(headers, rows)
 
 
+_GREEN = "\033[32m"
+_RED = "\033[31m"
+_RESET = "\033[0m"
+
+
+def _colorize_status(value):
+    if not sys.stdout.isatty():
+        return value
+    if value == "active":
+        return f"{_GREEN}{value}{_RESET}"
+    if value == "locked":
+        return f"{_RED}{value}{_RESET}"
+    return value
+
+
 def _print_table(headers, rows):
+    # Compute widths from raw values (no ANSI codes) so columns align.
     cols = list(zip(headers, *rows)) if rows else [(h,) for h in headers]
     widths = [max(len(str(c)) for c in col) for col in cols]
-    fmt = "  ".join(f"{{:<{w}}}" for w in widths)
-    print(fmt.format(*headers))
+    status_idx = headers.index("status") if "status" in headers else -1
+    print("  ".join(str(h).ljust(w) for h, w in zip(headers, widths)))
     for row in rows:
-        print(fmt.format(*row))
+        out = []
+        for i, (cell, w) in enumerate(zip(row, widths)):
+            text = str(cell)
+            pad = " " * (w - len(text))
+            if i == status_idx:
+                out.append(_colorize_status(text) + pad)
+            else:
+                out.append(text + pad)
+        print("  ".join(out))
 
 
 def _build_modules_table(caps, type_filter="all"):
@@ -205,6 +247,9 @@ def main():
             _validate_proxy(args.proxy)
         except ValueError as e:
             print(f"[!] {e}", file=sys.stderr)
+            sys.exit(1)
+        if not _proxy_reachable(args.proxy):
+            print(f"[!] proxy unreachable: {args.proxy}", file=sys.stderr)
             sys.exit(1)
 
     if args.auth is not None:
