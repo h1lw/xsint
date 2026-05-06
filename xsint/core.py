@@ -355,8 +355,11 @@ class XsintEngine:
             result = await asyncio.wait_for(
                 run_func(session, clean_target), timeout=self.module_timeout
             )
+            count = 0
+            if isinstance(result, tuple) and len(result) == 2 and isinstance(result[1], list):
+                count = len(result[1])
             self._emit_progress(
-                progress_cb, "module_done", module=module_name, status="ok"
+                progress_cb, "module_done", module=module_name, status="ok", count=count
             )
             return module_name, result
         except asyncio.TimeoutError:
@@ -365,6 +368,7 @@ class XsintEngine:
                 "module_done",
                 module=module_name,
                 status="timeout",
+                count=0,
                 error=f"timeout after {self.module_timeout}s",
             )
             return module_name, (
@@ -384,6 +388,7 @@ class XsintEngine:
                 "module_done",
                 module=module_name,
                 status="error",
+                count=0,
                 error=str(e),
             )
             return module_name, e

@@ -345,42 +345,78 @@ async def async_main(args):
             return
 
         ran_any = False
-        spinner_stop = asyncio.Event()
         animate = sys.stdout.isatty()
+        # name -> {status: "running"|"done", count: int, status_str: str}
+        modules_state = {}
+        spinner_stop = asyncio.Event()
+        last_lines = [0]  # mutable so closures can update
+
+        def _render():
+            """Redraw the dashboard. TTY-only — non-TTY uses one-shot prints."""
+            DOT_FRAMES = [".  ", ".. ", "...", " ..", "  .", "   "]
+            frame = _render.frame = (getattr(_render, "frame", -1) + 1) % len(DOT_FRAMES)
+            dots = DOT_FRAMES[frame]
+
+            # Build lines in the order modules first appeared.
+            lines = []
+            for name, info in modules_state.items():
+                if info["status"] == "running":
+                    lines.append(f"[*] {name}: {dots}")
+                else:
+                    n = info["count"]
+                    lines.append(f"[+] {name}: {n} result{'s' if n != 1 else ''}")
+
+            buf = []
+            if last_lines[0]:
+                buf.append(f"\033[{last_lines[0]}A")
+            for line in lines:
+                buf.append("\r\033[2K" + line + "\n")
+            sys.stdout.write("".join(buf))
+            sys.stdout.flush()
+            last_lines[0] = len(lines)
 
         def on_progress(event):
             nonlocal ran_any
-            if event.get("event") == "module_done":
-                ran_any = True
-                name = event.get("module", "?")
-                status = event.get("status", "ok")
+            kind = event.get("event")
+            name = event.get("module", "?")
+            if kind == "module_start":
+                modules_state[name] = {"status": "running", "count": 0}
                 if animate:
-                    # Clear spinner line, print status, spinner redraws on next tick.
-                    sys.stdout.write("\r\033[2K")
-                sys.stdout.write(f"[+] {name}: {status}\n")
-                sys.stdout.flush()
+                    _render()
+                else:
+                    sys.stdout.write(f"[*] {name}: ...\n")
+                    sys.stdout.flush()
+            elif kind == "module_done":
+                ran_any = True
+                count = int(event.get("count", 0) or 0)
+                modules_state[name] = {"status": "done", "count": count}
+                if animate:
+                    _render()
+                else:
+                    suffix = "s" if count != 1 else ""
+                    sys.stdout.write(f"[+] {name}: {count} result{suffix}\n")
+                    sys.stdout.flush()
 
-        async def _spinner():
-            frames = [".  ", ".. ", "...", " ..", "  .", "   "]
-            i = 0
+        async def _animator():
             while not spinner_stop.is_set():
-                sys.stdout.write(f"\r\033[2K[*] searching{frames[i % len(frames)]}")
-                sys.stdout.flush()
-                i += 1
+                if any(info["status"] == "running" for info in modules_state.values()):
+                    _render()
                 try:
                     await asyncio.wait_for(spinner_stop.wait(), timeout=0.18)
                 except asyncio.TimeoutError:
                     pass
-            sys.stdout.write("\r\033[2K")
-            sys.stdout.flush()
 
-        spinner_task = asyncio.create_task(_spinner()) if animate else None
+        spinner_task = asyncio.create_task(_animator()) if animate else None
         try:
             report = await engine.scan(args.target, progress_cb=on_progress)
         finally:
             spinner_stop.set()
             if spinner_task:
                 await spinner_task
+            # Final render so any module that wrapped up between the last
+            # animator tick and the scan return is shown in its done state.
+            if animate and modules_state:
+                _render()
 
         if report.get("error"):
             print(f"[!] {report['error'].splitlines()[0]}")
