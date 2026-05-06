@@ -17,6 +17,20 @@ Hand `xsint` an email, username, phone number, IP, address, hash, or other ident
 
 ## 🛠️ Installation
 
+One-liner:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/memorypudding/xsint/main/install.sh | bash
+```
+
+Or pin a version / branch:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/memorypudding/xsint/main/install.sh | bash -s -- --version v1.0.0
+```
+
+Manual (clone + Python installer):
+
 ```bash
 git clone https://github.com/memorypudding/xsint.git
 cd xsint
@@ -35,6 +49,8 @@ The installer picks a compatible Python (3.10–3.13), copies the project into a
 
 - macOS / Linux: `~/.local/bin`
 - Windows: Python user `Scripts` directory
+
+No auth prompts during install — modules that need credentials (`ghunt`, `gitfive`, `hibp`, `intelx`, `9ghz`, `haxalot`) stay locked until you run `xsint --auth <service>`. See [docs/auth.md](docs/auth.md).
 
 ## Documentation
 

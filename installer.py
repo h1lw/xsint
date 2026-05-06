@@ -206,15 +206,6 @@ def suggested_shell_rc() -> str:
     return "~/.bashrc"
 
 
-def maybe_configure_auth(python: str, install_dir: Path, skip_prompt: bool) -> None:
-    if skip_prompt:
-        return
-    for tool in ("ghunt", "gitfive", "haxalot"):
-        answer = input(f"Configure {tool} now? (y/n): ").strip().lower()
-        if answer.startswith("y"):
-            run([python, "-m", "xsint", "--auth", tool], cwd=install_dir)
-
-
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Install xsint.")
     parser.add_argument(
@@ -226,11 +217,6 @@ def parse_args() -> argparse.Namespace:
         "--bin-dir",
         default=os.environ.get("XSINT_BIN_DIR"),
         help="Install location for wrapper commands.",
-    )
-    parser.add_argument(
-        "--no-auth-prompt",
-        action="store_true",
-        help="Skip post-install auth prompts.",
     )
     return parser.parse_args()
 
@@ -293,8 +279,6 @@ def main() -> None:
             warn(f"Persist it for new shells ({rc_file}):")
             warn(f"  echo 'export PATH=\"{bin_dir}:$PATH\"' >> {rc_file}")
         info("")
-
-    maybe_configure_auth(python, install_dir, args.no_auth_prompt)
 
     info("")
     success("Setup complete.")
