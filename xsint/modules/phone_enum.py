@@ -60,7 +60,6 @@ def _parse(target):
 # --- Amazon (login probe) ---------------------------------------------------
 
 # E.164 country code -> (regional Amazon domain, openid.assoc_handle)
-# Only marketplaces that accept E.164 phone numbers in the email field.
 _AMAZON_REGIONS = {
     "1":   ("amazon.com",     "usflex"),
     "44":  ("amazon.co.uk",   "gbflex"),
@@ -87,10 +86,22 @@ _AMAZON_REGIONS = {
 
 
 async def _chk_amazon(cc, num):
+    """Probe Amazon's regional unified-claim flow with a phone number.
+
+    Modern Amazon signin routes phone-number identifiers through
+    /ax/claim with claimType=phoneNumber + countryCode=<ISO>. The response
+    redirects to /ax/aaut/verify/... (or /ap/signin/...) when the account
+    exists, and stays on the claim page (often with an inline error) when
+    it does not. Falls back to detecting a password input element.
+    """
+    import re as _re
     domain, assoc = _AMAZON_REGIONS.get(cc, ("amazon.com", "usflex"))
+    iso = SNAP_CC_TO_ISO.get(cc)
+    if not iso:
+        return (None, None, None)
     show_url = f"https://{domain}"
     base = f"https://www.{domain}"
-    return_to = f"{base}/"
+    return_to = urllib.parse.quote(f"{base}/", safe="")
     signin_url = (
         f"{base}/ap/signin?openid.pape.max_auth_age=0"
         f"&openid.return_to={return_to}"
@@ -99,28 +110,65 @@ async def _chk_amazon(cc, num):
         f"&openid.claimed_id=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0%2Fidentifier_select"
         f"&openid.ns=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0"
     )
-    headers = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36"}
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+    }
     try:
         async with httpx.AsyncClient(timeout=PER_CHECK_TIMEOUT, follow_redirects=True) as client:
             r = await client.get(signin_url, headers=headers)
-            import re
+            html = r.text
+            landed_url = str(r.url)
+
+            # Pull every hidden input the form provides — picks up metadata1,
+            # anti-csrftoken-a2z, appAction, claimCollectionWorkflow, etc.
             data = {}
-            for tag in re.findall(r'<input[^>]+>', r.text):
-                m_name = re.search(r'name="([^"]+)"', tag)
-                m_val = re.search(r'value="([^"]*)"', tag)
+            for tag in _re.findall(r'<input[^>]+>', html):
+                m_name = _re.search(r'name="([^"]+)"', tag)
+                m_val = _re.search(r'value="([^"]*)"', tag)
                 if m_name:
                     data[m_name.group(1)] = m_val.group(1) if m_val else ""
+
+            # Form action — usually a relative path on the same host.
+            m_action = _re.search(r'<form[^>]+action="([^"]+)"', html)
+            action = m_action.group(1) if m_action else "/ap/signin/"
+            if action.startswith("/"):
+                action = base + action
+            elif not action.startswith("http"):
+                action = landed_url
+
+            # Override / add the phone-claim fields. Using setdefault preserves
+            # whatever the GET handed us when present.
             data["email"] = f"+{cc}{num}"
-            r2 = await client.post(f"{base}/ap/signin/", data=data, headers=headers)
+            data.setdefault("password", "")
+            data.setdefault("claimType", "phoneNumber")
+            data.setdefault("countryCode", iso)
+            data.setdefault("isServerSideRouting", "true")
+            data.setdefault("claimCollectionWorkflow", "unified")
+
+            post_headers = dict(headers)
+            post_headers["Content-Type"] = "application/x-www-form-urlencoded"
+            post_headers["Origin"] = base
+            post_headers["Referer"] = landed_url
+
+            r2 = await client.post(action, data=data, headers=post_headers, follow_redirects=False)
+
+            # 302 to a password / verify URL = recognized account.
+            if r2.status_code in (301, 302, 303, 307, 308):
+                loc = r2.headers.get("location", "") or ""
+                if any(p in loc for p in ("/ax/aaut/verify", "/ap/signin", "/ap/mfa", "/ap/cvf")):
+                    return (True, show_url, None)
+                # Some regions redirect back to the claim page on miss.
+                if "/ax/claim" in loc:
+                    return (False, show_url, None)
+                return (None, show_url, None)
+
             text = r2.text
-            # Account exists when the response asks for a password.
-            # `auth-password-missing-alert` appears on the .com flow after a
-            # password-less Continue; regional flows often skip straight to a
-            # password input with `id="ap_password"` and `name="password"`.
             if (
                 'id="auth-password-missing-alert"' in text
                 or 'id="ap_password"' in text
-                or 'name="password"' in text and 'type="password"' in text
+                or ('name="password"' in text and 'type="password"' in text)
             ):
                 return (True, show_url, None)
             return (False, show_url, None)
