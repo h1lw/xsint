@@ -8,6 +8,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -162,7 +163,36 @@ def _print_auth_status():
 
 _GREEN = "\033[32m"
 _RED = "\033[31m"
+_YELLOW = "\033[33m"
 _RESET = "\033[0m"
+
+
+def _module_status_line(name, info, stream):
+    """Format one dashboard line for `name`, colored if `stream` is a TTY.
+
+    [*] yellow → still running
+    [+] green  → finished, results > 0
+    [-] red    → finished, no results
+    """
+    is_tty = stream.isatty()
+
+    def paint(text, color):
+        return f"{color}{text}{_RESET}" if is_tty else text
+
+    if info["status"] == "running":
+        # Each module gets a phase offset hashed from its name so their
+        # dot animations don't tick in unison — gives the impression of
+        # independent per-module pacing without per-module timers.
+        DOT_FRAMES = [".  ", ".. ", "...", " ..", "  .", "   "]
+        offset = (abs(hash(name)) // 7) % len(DOT_FRAMES)
+        phase = (int(time.monotonic() * 4) + offset) % len(DOT_FRAMES)
+        return f"{paint('[*]', _YELLOW)} {name}: {DOT_FRAMES[phase]}"
+
+    n = info["count"]
+    if n > 0:
+        suffix = "s" if n != 1 else ""
+        return f"{paint('[+]', _GREEN)} {name}: {n} result{suffix}"
+    return f"{paint('[-]', _RED)} {name}: no results"
 
 
 def _colorize_status(value):
@@ -454,24 +484,16 @@ async def async_main(args):
 
         def _render():
             """Redraw the dashboard on the chosen progress stream."""
-            DOT_FRAMES = [".  ", ".. ", "...", " ..", "  .", "   "]
-            frame = _render.frame = (getattr(_render, "frame", -1) + 1) % len(DOT_FRAMES)
-            dots = DOT_FRAMES[frame]
-
-            # Build lines in the order modules first appeared.
-            lines = []
-            for name, info in modules_state.items():
-                if info["status"] == "running":
-                    lines.append(f"[*] {name}: {dots}")
-                else:
-                    n = info["count"]
-                    lines.append(f"[+] {name}: {n} result{'s' if n != 1 else ''}")
+            lines = [
+                _module_status_line(name, info, progress_stream)
+                for name, info in modules_state.items()
+            ]
 
             buf = []
             if last_lines[0]:
                 buf.append(f"\033[{last_lines[0]}A")
-            for line in lines:
-                buf.append("\r\033[2K" + line + "\n")
+            for rendered in lines:
+                buf.append("\r\033[2K" + rendered + "\n")
             progress_stream.write("".join(buf))
             progress_stream.flush()
             last_lines[0] = len(lines)
@@ -485,7 +507,10 @@ async def async_main(args):
                 if animate:
                     _render()
                 else:
-                    progress_stream.write(f"[*] {name}: ...\n")
+                    progress_stream.write(
+                        _module_status_line(name, modules_state[name],
+                                            progress_stream) + "\n"
+                    )
                     progress_stream.flush()
             elif kind == "module_done":
                 ran_any = True
@@ -494,8 +519,10 @@ async def async_main(args):
                 if animate:
                     _render()
                 else:
-                    suffix = "s" if count != 1 else ""
-                    progress_stream.write(f"[+] {name}: {count} result{suffix}\n")
+                    progress_stream.write(
+                        _module_status_line(name, modules_state[name],
+                                            progress_stream) + "\n"
+                    )
                     progress_stream.flush()
 
         async def _animator():
