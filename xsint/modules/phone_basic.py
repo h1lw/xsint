@@ -18,14 +18,12 @@ async def run(session, target):
         try:
             number = phonenumbers.parse(target, None)
         except phonenumbers.NumberParseException:
-            return 1, ["Could not parse number. Ensure it includes country code (e.g., +1)"]
+            return 1, [{"label": "Status", "value": "could not parse number (need country code, e.g. +1)", "source": "libphonenumbers"}]
 
-        # Validity Check
         if not phonenumbers.is_valid_number(number):
-            # refined error for "possible but invalid" (e.g. unassigned area code)
             if phonenumbers.is_possible_number(number):
-                 return 1, ["Number structure is valid, but the number is not assigned (Invalid)."]
-            return 1, ["Invalid Phone Number (Check country code or length)"]
+                return 1, [{"label": "Status", "value": "structure valid but number is unassigned", "source": "libphonenumbers"}]
+            return 1, [{"label": "Status", "value": "invalid phone number (check country code / length)", "source": "libphonenumbers"}]
 
         results = []
 
@@ -78,4 +76,4 @@ async def run(session, target):
         return 0, results
 
     except Exception as e:
-        return 1, [str(e)]
+        return 1, [{"label": "Error", "value": str(e), "source": "libphonenumbers"}]

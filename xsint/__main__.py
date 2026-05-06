@@ -337,6 +337,10 @@ async def async_main(args):
             if spinner_task:
                 await spinner_task
 
+        if report.get("error"):
+            print(f"[!] {report['error'].splitlines()[0]}")
+            return
+
         if not ran_any:
             print("[!] no eligible modules — run --auth to enable more, or check `xsint -m`")
             return

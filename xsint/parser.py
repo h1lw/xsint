@@ -46,12 +46,15 @@ def detect_target_type(target):
     if re.match(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$", target):
         return "email", target
 
-    # Phone (Must be valid E.164 to be auto-detected)
+    # Phone — accept anything libphonenumbers can structurally parse with
+    # a country prefix. is_valid_number is too strict (rejects unassigned
+    # ranges that real services may still recognize); is_possible_number is
+    # the right bar for auto-detect.
     try:
         pn = phonenumbers.parse(target, None)
-        if phonenumbers.is_valid_number(pn):
+        if phonenumbers.is_possible_number(pn):
             return "phone", target
-    except:
+    except Exception:
         pass
 
     # --- 3. REJECTION ---
