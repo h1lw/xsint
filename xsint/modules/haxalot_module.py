@@ -82,14 +82,16 @@ INFO = {
 def is_ready():
     """
     Module readiness gate used by the engine.
-    Haxalot is opt-in and requires both:
-    - successful setup marker in xsint config
-    - local Telegram session file
+    Haxalot is opt-in. The Telethon session file is the source of truth:
+    if it exists and `--auth haxalot` has been run at least once, we're
+    ready. We don't gate on a transient config flag — a network blip
+    during a previous scan would otherwise lock the user out until they
+    re-authenticated.
     """
-    cfg = get_config()
-    if not cfg.get("haxalot_enabled", False):
-        return False, "run xsint --auth haxalot"
     if os.path.isfile(SESSION_FILE):
+        # Mirror this back into config so other code (and the dashboard)
+        # sees the module as enabled even if a past failure cleared it.
+        get_config().set("haxalot_enabled", True)
         return True, ""
     return False, "run xsint --auth haxalot"
 
@@ -313,8 +315,10 @@ async def run(session, target):
     
     is_auth = await check_auth_state()
     if not is_auth:
-        get_config().set("haxalot_enabled", False)
-        return 0, [{"label": "Status", "value": "Module locked (Run --auth haxalot)", "source": PARENT, "risk": "low"}]
+        # Don't clear the config flag — a transient Telegram outage
+        # shouldn't permanently lock the user out. is_ready() trusts the
+        # session file directly, so we just bail quietly here.
+        return 0, []
 
     try:
         html_content = await lookup(target)
