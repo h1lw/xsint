@@ -61,22 +61,33 @@ def _run_external_login(service):
     service = _normalize_service(service)
     candidates = []
 
+    # 1. Binary on PATH (most reliable for pipx-installed CLI tools).
+    which_path = shutil.which(service)
+    if which_path:
+        candidates.append([which_path, "login"])
+
+    # 2. Default pipx venv binary.
+    candidates.append([
+        os.path.expanduser(f"~/.local/pipx/venvs/{service}/bin/{service}"),
+        "login",
+    ])
+
+    # 3. Binary alongside the active interpreter (venv-aware).
+    candidates.append([
+        os.path.join(os.path.dirname(sys.executable), service),
+        "login",
+    ])
+
+    # 4. python -m fallback. ghunt's package has no __main__ so we skip it
+    #    here; gitfive needs to call the parser directly because the
+    #    installed CLI script lives outside the package.
     if service == "gitfive":
         candidates.append([
             sys.executable, "-c",
             "from gitfive.lib.cli import parse_args; parse_args()", "login",
         ])
-    else:
+    elif service != "ghunt":
         candidates.append([sys.executable, "-m", service, "login"])
-
-    local_bin = os.path.join(os.path.dirname(sys.executable), service)
-    candidates.append([local_bin, "login"])
-
-    which_path = shutil.which(service)
-    if which_path:
-        candidates.append([which_path, "login"])
-
-    candidates.append([os.path.expanduser(f"~/.local/pipx/venvs/{service}/bin/{service}"), "login"])
 
     attempted = False
     for cmd in candidates:
@@ -87,7 +98,10 @@ def _run_external_login(service):
             attempted = True
             if subprocess.run(cmd).returncode == 0:
                 return True, True
-            return False, True
+            # Non-zero — try the next candidate rather than bailing. Many
+            # services have a 'wrong way to invoke me' error path (e.g.
+            # python -m ghunt) that exits 1 even though another candidate
+            # would succeed.
         except Exception:
             continue
     return False, attempted
