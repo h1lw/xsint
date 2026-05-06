@@ -112,7 +112,16 @@ async def _chk_amazon(cc, num):
                     data[m_name.group(1)] = m_val.group(1) if m_val else ""
             data["email"] = f"+{cc}{num}"
             r2 = await client.post(f"{base}/ap/signin/", data=data, headers=headers)
-            if 'id="auth-password-missing-alert"' in r2.text:
+            text = r2.text
+            # Account exists when the response asks for a password.
+            # `auth-password-missing-alert` appears on the .com flow after a
+            # password-less Continue; regional flows often skip straight to a
+            # password input with `id="ap_password"` and `name="password"`.
+            if (
+                'id="auth-password-missing-alert"' in text
+                or 'id="ap_password"' in text
+                or 'name="password"' in text and 'type="password"' in text
+            ):
                 return (True, show_url, None)
             return (False, show_url, None)
     except Exception:
