@@ -286,16 +286,31 @@ async def async_main(args):
             print(HELP_TEXT, end="")
             return
 
+        ran_any = False
+
         def on_progress(event):
+            nonlocal ran_any
             if event.get("event") == "module_done":
+                ran_any = True
                 name = event.get("module", "?")
                 status = event.get("status", "ok")
                 print(f"[+] {name}: {status}")
 
         report = await engine.scan(args.target, progress_cb=on_progress)
-        if args.show_found:
+
+        if not ran_any:
+            print("[!] no eligible modules — run --auth to enable more, or check `xsint -m`")
+            return
+
+        findings = len(report.get("results") or [])
+        if findings == 0:
+            print("[!] no intel found")
+        elif args.show_found:
             print()
             print_results(report)
+        else:
+            sources = len({r.get("source") for r in report["results"]})
+            print(f"[!] {findings} finding{'s' if findings != 1 else ''} across {sources} source{'s' if sources != 1 else ''} — pass --show-found to view")
     finally:
         await engine.close()
 

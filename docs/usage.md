@@ -46,13 +46,26 @@ MISC:
 
 ## Output
 
-By default, `xsint` prints one line per module with its run status:
+By default, `xsint` prints one line per module with its run status, then a summary:
 
 ```text
 [+] hibp: ok
 [+] nineghz: ok
 [+] haxalot_module: ok
-[+] email_basic: ok
+[!] 5 findings across 3 sources — pass --show-found to view
+```
+
+If no modules were eligible (everything was locked, e.g. no auth configured for the target type):
+
+```text
+[!] no eligible modules — run --auth to enable more, or check `xsint -m`
+```
+
+If modules ran but found nothing:
+
+```text
+[+] ghunt_lookup: ok
+[!] no intel found
 ```
 
 Pass `--show-found` to also print the full findings report after the scan:
