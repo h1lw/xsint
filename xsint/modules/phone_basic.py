@@ -20,9 +20,7 @@ async def run(session, target):
         except phonenumbers.NumberParseException:
             return 1, [{"label": "Status", "value": "could not parse number (need country code, e.g. +1)", "source": "libphonenumbers"}]
 
-        if not phonenumbers.is_valid_number(number):
-            if phonenumbers.is_possible_number(number):
-                return 1, [{"label": "Status", "value": "structure valid but number is unassigned", "source": "libphonenumbers"}]
+        if not phonenumbers.is_possible_number(number):
             return 1, [{"label": "Status", "value": "invalid phone number (check country code / length)", "source": "libphonenumbers"}]
 
         results = []
