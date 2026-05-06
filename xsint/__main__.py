@@ -17,7 +17,7 @@ API_KEY_SERVICES = {"hibp", "intelx", "9ghz"}
 LOGIN_SERVICES = {"ghunt", "gitfive"}
 SETUP_SERVICES = {"haxalot"}
 ALL_AUTH_SERVICES = API_KEY_SERVICES | LOGIN_SERVICES | SETUP_SERVICES
-CUSTOM_MODULES = {"instagram", "phone_basic", "email_enum"}
+CUSTOM_MODULES = {"instagram", "phone_basic", "email_enum", "phone_enum"}
 
 
 def _normalize_service(service):
