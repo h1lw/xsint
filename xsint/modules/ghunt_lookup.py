@@ -11,14 +11,22 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from xsint.config import get_config
-from xsint._silence import silenced_stdout
+from xsint._silence import silence_module_prints, quiet_rich_console
 
 # GHunt requires Python 3.10+ and must be installed separately via pipx
 try:
     from ghunt.helpers import auth, playgames, gmaps, calendar as gcalendar
     from ghunt.apis.peoplepa import PeoplePaHttp
     from ghunt import config as ghunt_config
+    from ghunt import globals as ghunt_globals
     GHUNT_AVAILABLE = True
+    silence_module_prints([
+        "ghunt.helpers.auth",
+        "ghunt.helpers.playgames",
+        "ghunt.helpers.gmaps",
+        "ghunt.objects.base",
+    ])
+    quiet_rich_console(ghunt_globals.rc)
 except Exception:
     GHUNT_AVAILABLE = False
 
@@ -84,11 +92,10 @@ async def _load_creds_non_interactive(client):
     builtins.input = _blocked_prompt
     getpass.getpass = _blocked_prompt
     try:
-        with silenced_stdout():
-            try:
-                return await auth.load_and_auth(client, interactive=False)
-            except TypeError:
-                return await auth.load_and_auth(client)
+        try:
+            return await auth.load_and_auth(client, interactive=False)
+        except TypeError:
+            return await auth.load_and_auth(client)
     finally:
         builtins.input = original_input
         getpass.getpass = original_getpass
@@ -134,8 +141,7 @@ async def run(session, target):
             "source": PARENT,
         }]
 
-    with silenced_stdout():
-        return await _run_lookup(target, PARENT)
+    return await _run_lookup(target, PARENT)
 
 
 async def _run_lookup(target, PARENT):

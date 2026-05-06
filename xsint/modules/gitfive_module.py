@@ -9,7 +9,7 @@ import base64
 from pathlib import Path
 
 from xsint.config import get_config
-from xsint._silence import silenced_stdout
+from xsint._silence import silence_module_prints, quiet_rich_console
 
 # GitFive requires Python 3.10+ and must be installed separately via pipx
 try:
@@ -19,6 +19,13 @@ try:
     from gitfive.lib.objects import GitfiveRunner
     from gitfive import config as gitfive_config
     GITFIVE_AVAILABLE = True
+    # Silence gitfive's stray status prints (e.g. "[DEBUG] Cookies valid !",
+    # "[METAMON] 🐙 Added commits ...") at import time. Module-local rebind,
+    # so we don't affect any other code's print().
+    silence_module_prints([
+        "gitfive.lib.objects",
+        "gitfive.lib.metamon",
+    ])
 except Exception:
     GITFIVE_AVAILABLE = False
 
@@ -79,8 +86,7 @@ async def _login_non_interactive(runner):
     builtins.input = _blocked_prompt
     getpass.getpass = _blocked_prompt
     try:
-        with silenced_stdout():
-            await asyncio.wait_for(runner.login(), timeout=LOGIN_TIMEOUT_SECONDS)
+        await asyncio.wait_for(runner.login(), timeout=LOGIN_TIMEOUT_SECONDS)
     finally:
         builtins.input = original_input
         getpass.getpass = original_getpass
@@ -161,8 +167,7 @@ async def run(session, target):
             "source": PARENT,
         }]
 
-    with silenced_stdout():
-        return await _run_lookup(target, PARENT)
+    return await _run_lookup(target, PARENT)
 
 
 async def _run_lookup(target, PARENT):
@@ -179,6 +184,14 @@ async def _run_lookup(target, PARENT):
 
     try:
         runner = GitfiveRunner()
+
+        # Mute the rich.Console instances rich.console captured at
+        # GitfiveRunner.__init__ time so tmprinter.out() goes to /dev/null.
+        try:
+            quiet_rich_console(runner.rc)
+            quiet_rich_console(runner.tmprinter.rc)
+        except Exception:
+            pass
 
         # FIX 2: PROXY SUPPORT
         # We hot-swap the internal client to inject the proxy configuration
@@ -215,8 +228,7 @@ async def _run_lookup(target, PARENT):
         username = target
         if "@" in target:
             # Email flow: use metamon commit spoofing to resolve email -> username
-            with silenced_stdout():
-                resolve_repo, emails_index = await metamon.start(runner, [target])
+            resolve_repo, emails_index = await metamon.start(runner, [target])
             emails_accounts = await _scrape_commits(runner, resolve_repo, emails_index)
 
             # Clean up the resolve repo
@@ -339,8 +351,7 @@ async def _run_lookup(target, PARENT):
         )
 
         if emails:
-            with silenced_stdout():
-                temp_repo_name, emails_index = await metamon.start(runner, emails)
+            temp_repo_name, emails_index = await metamon.start(runner, emails)
 
             if emails_index:
                 emails_accounts = await _scrape_commits(
