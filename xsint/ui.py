@@ -24,6 +24,82 @@ def print_results(report, target=None, fmt="raw"):
         _print_raw(report)
 
 
+# ---------- shared helpers for pretty + html (synthesis layer) ----------
+
+def _email_local(target):
+    if not target or "@" not in str(target):
+        return ""
+    return str(target).split("@", 1)[0].lower()
+
+
+def _name_tokens(s):
+    """Return lowercase 2+ char alpha tokens — used for fuzzy name matching."""
+    return re.findall(r"[a-zà-ÿ]{2,}", s.lower())
+
+
+def _name_matches_target(name, target_local):
+    """Does this name plausibly belong to the target?"""
+    if not name or not target_local:
+        return False
+    target_local = re.sub(r"\d+", "", target_local).lower()
+    if not target_local:
+        return False
+    for tok in _name_tokens(name):
+        if tok in target_local or target_local in tok:
+            return True
+    return False
+
+
+_CARRIER_NAMES = {
+    "vodafone", "vodafone india", "airtel", "bharti airtel", "reliance jio",
+    "reliance", "reliance mobile", "reliance mobile gsm", "idea cellular",
+    "idea", "aircel", "bsnl", "mts india", "tata", "tata docomo", "tata cdma",
+    "telenor", "uninor", "videocon", "lycamobile", "verizon", "at&t", "att",
+    "t-mobile", "sprint", "tmobile", "orange", "ee", "o2", "vodafone uk",
+    "telefonica", "movistar", "claro", "telcel", "rogers", "bell", "telus",
+}
+
+
+def _looks_like_phone_number(s):
+    """Strict phone-shape check — keeps real numbers, drops carrier names."""
+    digits = re.sub(r"\D", "", s)
+    if 7 <= len(digits) <= 15:
+        # Reject strings dominated by alpha (e.g. "Reliance Jio" with stray digits).
+        alpha = sum(c.isalpha() for c in s)
+        return alpha < len(digits)
+    return False
+
+
+def _looks_like_carrier(s):
+    return s.lower().strip() in _CARRIER_NAMES
+
+
+_LOCATION_NOISE = {
+    "active", "inactive", "complete", "address", "consumer", "unknown",
+    "lead", "member", "n/a", "none", "null", "default", "true", "false",
+    "0", "1", "yes", "no",
+}
+
+
+def _is_meaningful_location(s):
+    s = s.strip()
+    if not s:
+        return False
+    # Pure numeric / lat-lng noise.
+    if re.match(r"^[\-\d.,\s]+$", s):
+        return False
+    # Single 2-letter token (US state codes alone are noise without context).
+    if re.match(r"^[A-Z]{2}$", s):
+        return False
+    if s.lower() in _LOCATION_NOISE:
+        return False
+    return True
+
+
+def _is_ip(s):
+    return bool(re.match(r"^\d{1,3}(\.\d{1,3}){3}$", s.strip()))
+
+
 # ---------- raw ----------
 
 def _print_raw(report):
@@ -183,16 +259,28 @@ def _print_html(report, target):
     elif not results:
         parts.append('<section class="dossier"><p>No findings.</p></section>')
     else:
-        bins = _bin_findings(results)
+        bins = _bin_findings(results, target=target)
 
-        # PERSON
-        person_rows = []
+        # IDENTITY
+        identity_rows = []
         if bins["names"]:
-            person_rows.append(("name", _html_attributed_list(bins["names"])))
-        if bins["aliases"]:
-            person_rows.append(("alias", _html_attributed_list(bins["aliases"])))
+            items = []
+            for name, breaches, auth in bins["names"]:
+                if auth:
+                    items.append(
+                        f'{_html.escape(name)}'
+                        f' <span class="attr">[{_html.escape(auth)}]</span>'
+                    )
+                elif breaches:
+                    items.append(
+                        f'{_html.escape(name)}'
+                        f' <span class="attr">[{_html.escape(", ".join(breaches))}]</span>'
+                    )
+                else:
+                    items.append(_html.escape(name))
+            identity_rows.append(("name", _html_list(items)))
         if bins["photos"]:
-            person_rows.append((
+            identity_rows.append((
                 "photo",
                 _html_list([
                     f'<a href="{_html.escape(v)}" target="_blank" rel="noopener">'
@@ -200,42 +288,61 @@ def _print_html(report, target):
                     for v, _ in bins["photos"]
                 ]),
             ))
-        if person_rows:
-            parts.append(_html_section("Person", person_rows))
-
-        # ACCOUNTS
-        account_rows = []
         for kind, value, src in bins["ids"]:
-            account_rows.append((
+            identity_rows.append((
                 kind.lower(),
                 f'<span class="mono">{_html.escape(str(value))}</span>'
-                f' <span class="attr">({_html.escape(src)})</span>',
+                f' <span class="attr">[{_html.escape(src)}]</span>',
             ))
+        if identity_rows:
+            parts.append(_html_section("Identity", identity_rows))
+
+        # ALIASES
+        if bins["aliases"]:
+            parts.append(_html_section("Aliases", [
+                ("handles", _html_attributed_list_from_breaches(bins["aliases"])),
+            ]))
+
+        # REGISTERED ACCOUNTS
         if bins["registered_on"]:
             services = sorted({s for s, _ in bins["registered_on"]}, key=str.lower)
             tags = "".join(
                 f'<span class="tag">{_html.escape(s)}</span>' for s in services
             )
-            account_rows.append((f"registered ({len(services)})", tags))
-        if account_rows:
-            parts.append(_html_section("Accounts", account_rows))
+            parts.append(_html_section(
+                f"Registered accounts ({len(services)})",
+                [("services", tags)],
+            ))
 
         # CONTACT
         contact_rows = []
         if bins["phones"]:
-            contact_rows.append(("phones", _html_attributed_list(bins["phones"])))
+            contact_rows.append(("phones",
+                _html_attributed_list_from_breaches(bins["phones"])))
         if bins["alt_emails"]:
-            contact_rows.append(("emails", _html_attributed_list(bins["alt_emails"])))
+            contact_rows.append(("emails",
+                _html_attributed_list_from_breaches(bins["alt_emails"])))
+        if bins["carriers"]:
+            contact_rows.append(("carriers",
+                _html_attributed_list_from_breaches(bins["carriers"])))
+        if bins["ips"]:
+            contact_rows.append(("ip seen",
+                _html_list([
+                    f'<span class="mono">{_html.escape(v)}</span>'
+                    f' <span class="attr">[{_html.escape(", ".join(b))}]</span>'
+                    for v, b in bins["ips"]
+                ])))
         if contact_rows:
             parts.append(_html_section("Contact", contact_rows))
 
         # LOCATIONS
         if bins["locations"]:
-            parts.append(_html_section("Locations", [
-                ("seen", _html_attributed_list(bins["locations"]))
-            ]))
+            parts.append(_html_section(
+                f"Locations ({len(bins['locations'])})",
+                [("seen", _html_attributed_list_from_breaches(bins["locations"]))],
+            ))
 
-        # BREACH EXPOSURE
+        # BREACH HISTORY
         if bins["breaches"]:
             tags = "".join(
                 f'<span class="tag breach-tag">'
@@ -245,42 +352,47 @@ def _print_html(report, target):
                 f'</span>'
                 for name, date, src in bins["breaches"]
             )
-            parts.append(_html_section("Breach exposure", [
-                ("count", str(len(bins["breaches"]))),
-                ("breaches", tags),
-            ]))
+            parts.append(_html_section(
+                f"Breach history ({len(bins['breaches'])})",
+                [("breaches", tags)],
+            ))
 
         # CREDENTIALS LEAKED
         cred_rows = []
         if bins["passwords"]:
-            cred_rows.append(("passwords",
+            cred_rows.append((f"passwords ({len(bins['passwords'])})",
                 _html_list([
                     f'<span class="secret">{_html.escape(v)}</span>'
-                    f' <span class="attr">[{_html.escape(attr)}]</span>'
-                    for v, attr in bins["passwords"]
+                    f' <span class="attr">[{_html.escape(", ".join(b))}]</span>'
+                    for v, b in bins["passwords"]
                 ])
             ))
         if bins["hashes"]:
-            cred_rows.append(("hashes",
+            cred_rows.append((f"hashes ({len(bins['hashes'])})",
                 _html_list([
                     f'<span class="hash">{_html.escape(v)}</span>'
-                    f' <span class="attr">[{_html.escape(attr)}]</span>'
-                    for v, attr in bins["hashes"]
+                    f' <span class="attr">[{_html.escape(", ".join(b))}]</span>'
+                    for v, b in bins["hashes"]
                 ])
             ))
         if cred_rows:
             parts.append(_html_section("Credentials leaked", cred_rows))
 
         # ACTIVITY
-        if bins["activity"]:
-            parts.append(_html_section("Activity", [
-                ("events",
-                 _html_list([_html.escape(label) for label, _src in bins["activity"]]))
-            ]))
+        if bins["activity"] or bins["dates"]:
+            activity_items = [_html.escape(label) for label, _src in bins["activity"]]
+            for label, val, breach in bins["dates"]:
+                activity_items.append(
+                    f'<span class="attr">{_html.escape(breach)}:</span> '
+                    f'{_html.escape(label)}: <span class="mono">{_html.escape(val)}</span>'
+                )
+            if activity_items:
+                parts.append(_html_section("Activity",
+                    [("events", _html_list(activity_items))]))
 
         # LINKS
         if bins["links"]:
-            parts.append(_html_section("Links", [
+            parts.append(_html_section(f"Links ({len(bins['links'])})", [
                 ("seen",
                  _html_list([
                      f'<span class="attr">{_html.escape(label)}:</span> '
@@ -290,15 +402,14 @@ def _print_html(report, target):
                  ]))
             ]))
 
-        # OTHER (anything we couldn't classify) — fold in last so nothing
-        # silently disappears.
+        # OTHER
         if bins["other"]:
             parts.append(_html_section("Other", [
                 ("misc",
                  _html_list([
                      f'<span class="attr">{_html.escape(str(a))}:</span> '
                      f'{_linkify_html(str(b))} '
-                     f'<span class="attr">({_html.escape(str(c))})</span>'
+                     f'<span class="attr">[{_html.escape(str(c))}]</span>'
                      for a, b, c in bins["other"]
                  ]))
             ]))
@@ -337,6 +448,18 @@ def _html_attributed_list(items):
     return f"<ul>{lis}</ul>"
 
 
+def _html_attributed_list_from_breaches(items):
+    """Format a list of (value, [breach_list]) into <li> entries."""
+    lis = []
+    for value, breaches in items:
+        attr = (
+            f' <span class="attr">[{_html.escape(", ".join(breaches))}]</span>'
+            if breaches else ""
+        )
+        lis.append(f'<li>{_html.escape(value)}{attr}</li>')
+    return f"<ul>{''.join(lis)}</ul>"
+
+
 def _linkify_html(text):
     escaped = _html.escape(text)
     return re.sub(
@@ -351,89 +474,163 @@ def _linkify_html(text):
 def _print_pretty(report, target):
     target_type = str(report.get("type", "unknown")).upper()
     error = report.get("error")
-
-    width = 64
+    width = 72
     line = "=" * width
-    sep = "-" * width
+    sep = "─" * width
 
     print(line)
-    print("  IDENTITY REPORT")
+    print(f"  IDENTITY REPORT  —  {target or '(unknown)'}")
     print(line)
-    print(f"  target   : {target or '(unknown)'}")
     print(f"  type     : {target_type}")
     print(f"  scanned  : {time.strftime('%Y-%m-%d %H:%M', time.localtime())}")
 
     if error:
-        print(f"  status   : aborted")
+        print("  status   : aborted")
         print(f"  error    : {error}")
         print(line)
         return
 
     results = report.get("results", []) or []
     sources = sorted({r.get("source") for r in results if r.get("source")})
-    print(f"  findings : {len(results)} across {len(sources)} sources")
-    print(sep)
-    print()
 
     if not results:
-        print("  no intel found")
+        print("  status   : no intel found")
         print(line)
         return
 
-    bins = _bin_findings(results)
+    bins = _bin_findings(results, target=target)
 
-    _section_pretty("PERSON", [
-        ("name", _format_attributed(bins["names"])),
-        ("alias", _format_attributed(bins["aliases"])),
-        ("photo", _format_plain([v for v, _ in bins["photos"]])),
-    ])
+    print(
+        f"  sources  : {len(sources)} modules • "
+        f"{len(bins['breaches'])} breaches • "
+        f"{len(bins['passwords'])} passwords • "
+        f"{len(bins['hashes'])} hashes"
+    )
+    print(sep)
+    print()
 
-    account_rows = []
+    # ── IDENTITY ──
+    id_rows = []
+    if bins["names"]:
+        # Authoritative first (third tuple element non-empty), then matched.
+        lines = []
+        for name, breaches, auth in bins["names"]:
+            if auth:
+                lines.append(f"{name}  [{auth}]")
+            elif breaches:
+                lines.append(f"{name}  [{', '.join(breaches)}]")
+            else:
+                lines.append(name)
+        id_rows.append(("name", lines))
+    if bins["photos"]:
+        id_rows.append(("photo", [v for v, _ in bins["photos"]]))
     for kind, value, src in bins["ids"]:
-        account_rows.append((kind.lower(), f"{value} ({src})"))
+        id_rows.append((kind.lower(), f"{value}  [{src}]"))
+    if id_rows:
+        _section_pretty("IDENTITY", id_rows)
+
+    # ── ALIASES / HANDLES ──
+    if bins["aliases"]:
+        lines = []
+        for value, breaches in bins["aliases"]:
+            tag = f"  [{', '.join(breaches)}]" if breaches else ""
+            lines.append(f"{value}{tag}")
+        _section_pretty("ALIASES", [("handles", lines)])
+
+    # ── ACCOUNTS REGISTERED ──
     if bins["registered_on"]:
         services = sorted({s for s, _ in bins["registered_on"]}, key=str.lower)
-        account_rows.append(("registered on", _wrap(", ".join(services), 56)))
-    _section_pretty("ACCOUNTS", account_rows)
+        _section_pretty(
+            f"REGISTERED ACCOUNTS ({len(services)})",
+            [("services", _wrap(" • ".join(services), 64))],
+        )
 
-    _section_pretty("CONTACT", [
-        ("phones", _format_attributed(bins["phones"])),
-        ("emails", _format_attributed(bins["alt_emails"])),
-    ])
+    # ── CONTACT ──
+    contact_rows = []
+    if bins["phones"]:
+        contact_rows.append(("phones", [
+            f"{v}  [{', '.join(b)}]" if b else v for v, b in bins["phones"]
+        ]))
+    if bins["alt_emails"]:
+        contact_rows.append(("emails", [
+            f"{v}  [{', '.join(b)}]" if b else v for v, b in bins["alt_emails"]
+        ]))
+    if bins["carriers"]:
+        contact_rows.append(("carriers", [
+            f"{v}  [{', '.join(b)}]" if b else v for v, b in bins["carriers"]
+        ]))
+    if bins["ips"]:
+        contact_rows.append(("ip seen", [
+            f"{v}  [{', '.join(b)}]" if b else v for v, b in bins["ips"]
+        ]))
+    if contact_rows:
+        _section_pretty("CONTACT", contact_rows)
 
+    # ── LOCATIONS ──
     if bins["locations"]:
-        _section_pretty("LOCATIONS", [
-            ("seen", _format_attributed(bins["locations"]))
-        ])
+        loc_lines = [
+            f"{v}  [{', '.join(b)}]" if b else v
+            for v, b in bins["locations"]
+        ]
+        _section_pretty(f"LOCATIONS ({len(loc_lines)})",
+                         [("seen", loc_lines)])
 
+    # ── BREACH HISTORY ──
     if bins["breaches"]:
-        breach_lines = []
+        dated, undated = [], []
         for name, date, src in bins["breaches"]:
-            tail = f" ({date})" if date else ""
-            breach_lines.append(f"{name}{tail} [{src}]")
-        _section_pretty("BREACH EXPOSURE", [
-            ("count", str(len(bins["breaches"]))),
-            ("breaches", breach_lines),
-        ])
+            if date:
+                dated.append(f"{date:<12}{name}  [{src}]")
+            else:
+                undated.append(f"{'':<12}{name}  [{src}]")
+        # Dated breaches first (sorted descending by date), then undated.
+        dated.sort(reverse=True)
+        rows = []
+        if dated:
+            rows.append(("dated", dated))
+        if undated:
+            rows.append(("undated", undated))
+        _section_pretty(f"BREACH HISTORY ({len(bins['breaches'])})", rows)
 
+    # ── CREDENTIALS LEAKED ──
     cred_rows = []
     if bins["passwords"]:
-        cred_rows.append(("passwords", _format_creds(bins["passwords"])))
+        lines = [
+            f"{v:<32}  [{', '.join(b)}]" if b else v
+            for v, b in bins["passwords"]
+        ]
+        cred_rows.append((f"passwords ({len(bins['passwords'])})", lines))
     if bins["hashes"]:
-        cred_rows.append(("hashes", _format_creds(bins["hashes"])))
+        lines = [
+            f"{v:<48}  [{', '.join(b)}]" if b else v
+            for v, b in bins["hashes"]
+        ]
+        cred_rows.append((f"hashes ({len(bins['hashes'])})", lines))
     if cred_rows:
         _section_pretty("CREDENTIALS LEAKED", cred_rows)
 
-    if bins["activity"]:
-        _section_pretty("ACTIVITY", [
-            ("events", [label for label, _src in bins["activity"][:12]])
-        ])
+    # ── DATES / ACTIVITY ──
+    activity_lines = []
+    for label, src in bins["activity"]:
+        activity_lines.append(label)
+    if bins["dates"]:
+        # Group dates by breach.
+        by_breach = {}
+        for label, val, breach in bins["dates"]:
+            by_breach.setdefault(breach, []).append(f"{label}: {val}")
+        for breach in sorted(by_breach):
+            for line in by_breach[breach][:5]:  # Cap per-breach to 5
+                activity_lines.append(f"{breach}: {line}")
+    if activity_lines:
+        _section_pretty("ACTIVITY", [("events", activity_lines)])
 
+    # ── LINKS ──
     if bins["links"]:
-        link_lines = [f"{label}: {url}" for label, url in bins["links"][:10]]
-        _section_pretty("LINKS", [("seen", link_lines)])
+        link_lines = [f"{label}: {url}" for label, url in bins["links"]]
+        _section_pretty(f"LINKS ({len(link_lines)})",
+                         [("seen", link_lines)])
 
-    print(sep)
+    print(line)
 
 
 def _section_pretty(title, rows):
@@ -496,21 +693,26 @@ def _wrap(text, width):
 # Bin findings into identity sections. The classifier is permissive on
 # purpose — modules emit slightly different shapes, and we'd rather fall
 # back to "other" than mis-categorize.
-def _bin_findings(results):
+def _bin_findings(results, target=None):
+    target_local = _email_local(target)
+
     bins = {
-        "names": [],
-        "aliases": [],
+        "names": [],            # [(name, [breaches], authoritative_src)]
+        "aliases": [],          # [(value, [breaches])]
         "photos": [],
         "ids": [],
-        "phones": [],
+        "phones": [],           # [(value, [breaches])]
+        "carriers": [],         # [(name, [breaches])]
+        "ips": [],              # [(ip, [breaches])]
         "alt_emails": [],
-        "locations": [],
+        "locations": [],        # [(value, [breaches])]
         "registered_on": [],
-        "passwords": [],
-        "hashes": [],
+        "passwords": [],        # [(value, [breaches])]
+        "hashes": [],           # [(value, [breaches])]
         "breaches": [],
         "links": [],
         "activity": [],
+        "dates": [],            # [(label, value, breach)]
         "other": [],
     }
 
@@ -522,6 +724,48 @@ def _bin_findings(results):
             return
         seen.add(sig)
         bins[bucket].append(payload)
+
+    # Mergers — collect breach attributions per unique value so we end
+    # up with one row per value ("password X seen in [breach1, breach2]")
+    # instead of one row per record.
+    def _make_merger():
+        return {}
+
+    name_merge = _make_merger()
+    alias_merge = _make_merger()
+    phone_merge = _make_merger()
+    carrier_merge = _make_merger()
+    ip_merge = _make_merger()
+    location_merge = _make_merger()
+    password_merge = _make_merger()
+    hash_merge = _make_merger()
+    altemail_merge = _make_merger()
+
+    def _merge_into(merger, value, breach):
+        key = value.lower().strip()
+        if not key:
+            return
+        slot = merger.setdefault(key, {"value": value, "breaches": []})
+        if breach and breach not in slot["breaches"]:
+            slot["breaches"].append(breach)
+
+    def _explode_breaches(breach_attr):
+        """Expand 'Foo ×3, Bar, +2 more' into ['Foo', 'Bar']."""
+        if not breach_attr:
+            return []
+        out = []
+        for chunk in breach_attr.split(","):
+            chunk = chunk.strip()
+            chunk = re.sub(r"\s*×\d+\s*$", "", chunk)
+            chunk = re.sub(r"\s*\+\d+\s*more\s*$", "", chunk)
+            if chunk and chunk.lower() not in ("unknown", "summary"):
+                out.append(chunk)
+        return out
+
+    # Names from authoritative sources (GHunt, GitFive direct API) bypass
+    # the cross-corroboration filter.
+    authoritative_names = []  # [(name, source_label)]
+    authoritative_aliases = []
 
     # Breaches need cross-source merging — Haxalot, 9Ghz, HIBP, IntelX
     # can all report the same breach name, and we want one row per breach
@@ -570,7 +814,7 @@ def _bin_findings(results):
 
         if source == "GHunt":
             if label == "Name":
-                add("names", value.lower(), (value, "Google"))
+                authoritative_names.append((value, "Google"))
             elif label == "Gaia ID":
                 add("ids", ("gaia", value), ("Google Gaia", value, "GHunt"))
             elif label == "Profile Photo":
@@ -580,7 +824,7 @@ def _bin_findings(results):
                     (f"Google: active in {value}", "GHunt"))
             elif "maps" in gl:
                 if label == "Profile":
-                    add("links", ("gmaps", value), ("google maps", value))
+                    add("links", ("gmaps", value), ("Google Maps", value))
                 elif value not in ("0", "None"):
                     add("activity", ("ghunt-maps-" + label, value),
                         (f"Google Maps {label.lower()}: {value}", "GHunt"))
@@ -588,9 +832,9 @@ def _bin_findings(results):
 
         if source == "GitFive":
             if label == "Username":
-                add("aliases", value.lower(), (value, "GitHub"))
+                authoritative_aliases.append((value, "GitHub"))
             elif label == "Name":
-                add("names", value.lower(), (value, "GitHub"))
+                authoritative_names.append((value, "GitHub"))
             elif label == "ID":
                 add("ids", ("github", value), ("GitHub", value, "GitFive"))
             elif label == "Email Resolved":
@@ -635,50 +879,53 @@ def _bin_findings(results):
 
         if source == "Haxalot":
             cat, breach_attr = _haxalot_classify(group, label)
-            if breach_attr and breach_attr.lower() not in ("unknown", "summary"):
-                # breach_attr can look like "Foo ×3, Bar, +2 more" — split
-                # so each contributing breach feeds the merger separately.
-                for chunk in breach_attr.split(","):
-                    chunk = chunk.strip()
-                    chunk = re.sub(r"\s*×\d+\s*$", "", chunk)
-                    chunk = re.sub(r"\s*\+\d+\s*more\s*$", "", chunk)
-                    if chunk:
-                        merge_breach(chunk, "", "Haxalot")
+            breach_chunks = _explode_breaches(breach_attr)
+            for chunk in breach_chunks:
+                merge_breach(chunk, "", "Haxalot")
+
+            # Pick the first contributing breach as the "primary" attr
+            # for value-level rows (used as the merger's per-breach key).
+            primary_breach = breach_chunks[0] if breach_chunks else "Haxalot"
 
             if cat == "passwords":
-                add("passwords", value, (value, breach_attr))
+                _merge_into(password_merge, value, primary_breach)
             elif cat == "hashes":
-                add("hashes", value, (value, breach_attr))
+                # Filter obvious junk: very short tokens that aren't actual
+                # hashes (e.g. salt fragments < 6 chars).
+                if len(value) >= 6:
+                    _merge_into(hash_merge, value, primary_breach)
             elif cat == "names":
-                add("names", value.lower(), (value, f"Haxalot/{breach_attr}"))
+                _merge_into(name_merge, value, primary_breach)
             elif cat == "aliases":
-                add("aliases", value.lower(), (value, f"Haxalot/{breach_attr}"))
+                _merge_into(alias_merge, value, primary_breach)
             elif cat == "phones":
-                add("phones", value, (value, f"Haxalot/{breach_attr}"))
+                if _looks_like_carrier(value):
+                    _merge_into(carrier_merge, value, primary_breach)
+                elif _looks_like_phone_number(value):
+                    _merge_into(phone_merge, value, primary_breach)
+                # else: silently drop noise
             elif cat == "alt_emails":
-                add("alt_emails", value.lower(), (value, f"Haxalot/{breach_attr}"))
+                _merge_into(altemail_merge, value, primary_breach)
             elif cat == "locations":
-                add("locations", value.lower(), (value, f"Haxalot/{breach_attr}"))
+                if _is_meaningful_location(value):
+                    _merge_into(location_merge, value, primary_breach)
             elif cat == "ips":
-                add("activity", ("hax-ip", value),
-                    (f"IP {value} ({breach_attr})", "Haxalot"))
+                if _is_ip(value):
+                    _merge_into(ip_merge, value, primary_breach)
             elif cat == "dates":
-                add("activity", ("hax-date-" + label, value),
-                    (f"{label}: {value} ({breach_attr})", "Haxalot"))
+                bins["dates"].append((label, value, primary_breach))
             elif cat == "links":
-                add("links", value, (f"haxalot/{breach_attr}", value))
+                add("links", value, (primary_breach or "Haxalot", value))
             elif cat == "ids":
                 add("ids", (label, value), (label, value, "Haxalot"))
             else:
                 add("other", ("hax-" + label, value),
-                    (label, value, f"Haxalot/{breach_attr}"))
+                    (label, value, f"Haxalot/{primary_breach}"))
             continue
 
         add("other", (source + label, value), (label, value, source))
 
-    # Materialize merged breaches: one row per unique breach, attribution
-    # joined by ", ". Cross-corroborated breaches (multiple sources) sort
-    # to the top so the user sees the high-confidence hits first.
+    # Materialize merged breaches.
     for slot in sorted(
         breach_merge.values(),
         key=lambda s: (-len(s["sources"]), s["name"].lower()),
@@ -688,6 +935,86 @@ def _bin_findings(results):
             slot["date"],
             ", ".join(slot["sources"]),
         ))
+
+    # ---- Names: only keep cross-corroborated or target-matching ones.
+    # Authoritative names from GHunt/GitFive go first, regardless of
+    # breach support.
+    auth_seen = set()
+    for value, src in authoritative_names:
+        key = value.lower()
+        if key in auth_seen:
+            continue
+        auth_seen.add(key)
+        bins["names"].append((value, [], src))
+
+    for slot in name_merge.values():
+        if slot["value"].lower() in auth_seen:
+            continue
+        # Filter junk: skip names that look like usernames (contain digits),
+        # very long tokens, or all-caps multi-word strings (looks like
+        # company/bank names from credit-card breaches).
+        v = slot["value"]
+        if re.search(r"\d", v):
+            continue  # has digits → likely a username
+        if len(v) > 40:
+            continue
+        # Cross-corroborated (>= 2 distinct breaches) OR matches target email.
+        is_corroborated = len(slot["breaches"]) >= 2
+        is_target_match = _name_matches_target(v, target_local)
+        if is_corroborated or is_target_match:
+            bins["names"].append((v, sorted(slot["breaches"]), None))
+
+    # Sort: target-match first, then by breach count desc, then alpha.
+    bins["names"].sort(key=lambda t: (
+        0 if t[2] else (1 if _name_matches_target(t[0], target_local) else 2),
+        -len(t[1]),
+        t[0].lower(),
+    ))
+
+    # ---- Aliases: include all non-empty, sort by breach count.
+    auth_alias_seen = set()
+    for value, src in authoritative_aliases:
+        key = value.lower()
+        if key in auth_alias_seen:
+            continue
+        auth_alias_seen.add(key)
+        bins["aliases"].append((value, [src]))
+
+    for slot in alias_merge.values():
+        if slot["value"].lower() in auth_alias_seen:
+            continue
+        bins["aliases"].append((slot["value"], sorted(slot["breaches"])))
+
+    bins["aliases"].sort(key=lambda t: (-len(t[1]), t[0].lower()))
+
+    # ---- Other mergers: just materialize.
+    for slot in sorted(phone_merge.values(),
+                        key=lambda s: (-len(s["breaches"]), s["value"])):
+        bins["phones"].append((slot["value"], sorted(slot["breaches"])))
+
+    for slot in sorted(carrier_merge.values(),
+                        key=lambda s: (-len(s["breaches"]), s["value"].lower())):
+        bins["carriers"].append((slot["value"], sorted(slot["breaches"])))
+
+    for slot in sorted(ip_merge.values(),
+                        key=lambda s: (-len(s["breaches"]), s["value"])):
+        bins["ips"].append((slot["value"], sorted(slot["breaches"])))
+
+    for slot in sorted(location_merge.values(),
+                        key=lambda s: (-len(s["breaches"]), s["value"].lower())):
+        bins["locations"].append((slot["value"], sorted(slot["breaches"])))
+
+    for slot in sorted(altemail_merge.values(),
+                        key=lambda s: (-len(s["breaches"]), s["value"].lower())):
+        bins["alt_emails"].append((slot["value"], sorted(slot["breaches"])))
+
+    for slot in sorted(password_merge.values(),
+                        key=lambda s: (-len(s["breaches"]), s["value"].lower())):
+        bins["passwords"].append((slot["value"], sorted(slot["breaches"])))
+
+    for slot in sorted(hash_merge.values(),
+                        key=lambda s: (-len(s["breaches"]), s["value"].lower())):
+        bins["hashes"].append((slot["value"], sorted(slot["breaches"])))
 
     return bins
 
