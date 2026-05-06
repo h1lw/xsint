@@ -257,7 +257,7 @@ def main() -> None:
     info("")
 
     section("Installing ghunt + gitfive...")
-    pip_install(python, ["--upgrade", "ghunt>=2.3.4", "gitfive", "--quiet"])
+    pip_install(python, ["--upgrade", "git+https://github.com/mxrch/ghunt", "gitfive", "--quiet"])
     info("")
 
     if os.name == "nt":
