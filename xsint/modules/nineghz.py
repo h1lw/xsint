@@ -4,7 +4,8 @@ import asyncio
 from xsint.config import get_config
 
 INFO = {
-    "free": ["email", "username", "phone", "ip", "hash", "name", "id", "ssn", "passport"],
+    "free": [],
+    "paid": ["email", "username", "phone", "ip", "hash", "name", "id", "ssn", "passport"],
     "api_key": "9ghz",
     "returns": ["breaches"],
     "themes": {

@@ -1,10 +1,21 @@
-# xsint
+# **xsint - Multi-source OSINT Aggregator**
 
-`xsint` is a command-line OSINT tool that runs multiple modules against one target.
+`xsint` runs many OSINT lookups in parallel against a single target and prints a unified report.
 
-## Install
+## **Summary**
 
-Run the single cross-platform installer script:
+*One target, many sources, one report.*
+
+Hand `xsint` an email, username, phone number, IP, address, hash, or other identifier and it dispatches every applicable module concurrently, then collapses the results into a single grouped report.
+
++ Async engine with parallel module execution
++ Auto-detects target type, with optional prefixes (`user:`, `email:`, `ip:`, ...) to disambiguate
++ Self-describing modules — each declares its supported types, returns, and credential requirements via an `INFO` dict
++ HTTP / SOCKS4 / SOCKS5 proxy support
++ Credential management for API-keyed and login-based modules
++ Pure stdlib output, no terminal-paint dependencies
+
+## 🛠️ Installation
 
 ```bash
 git clone https://github.com/memorypudding/xsint.git
@@ -12,7 +23,7 @@ cd xsint
 python3 installer.py
 ```
 
-Windows example:
+Windows:
 
 ```powershell
 git clone https://github.com/memorypudding/xsint.git
@@ -20,93 +31,23 @@ cd xsint
 py -3 installer.py
 ```
 
-The installer:
-- picks a compatible Python (3.10 to 3.13)
-- copies files into a user install directory:
-  - macOS/Linux: `~/.local/share/xsint`
-  - Windows: `%LOCALAPPDATA%\xsint`
-- installs `xsint` and dependencies into the current user's Python environment (no venv required)
-- installs wrapper commands (`xsint`, `ghunt`, `gitfive`) into:
-  - macOS/Linux: `~/.local/bin`
-  - Windows: Python user `Scripts` directory
+The installer picks a compatible Python (3.10–3.13), copies the project into a user install directory, installs `xsint` and its dependencies into the user's Python environment, and drops wrapper commands (`xsint`, `ghunt`, `gitfive`) into:
 
-## Command usage
+- macOS / Linux: `~/.local/bin`
+- Windows: Python user `Scripts` directory
 
-```text
-usage: xsint [-h] [-m [TYPE]] [--auth [ARGS ...]] [--proxy URL] [target]
+## Documentation
 
-positional arguments:
-  target              target to scan
+| Topic                             | Location                                    |
+| --------------------------------- | ------------------------------------------- |
+| CLI usage, target prefixes, output | [docs/usage.md](docs/usage.md)             |
+| Modules reference                 | [docs/modules.md](docs/modules.md)          |
+| Authentication                    | [docs/auth.md](docs/auth.md)                |
+| Proxy configuration               | [docs/proxy.md](docs/proxy.md)              |
+| Writing a module                  | [docs/development.md](docs/development.md)  |
 
-options:
-  -h, --help          show this help message and exit
-  -m, --modules [TYPE]
-                      list modules (optionally filter by input type)
-  --auth [ARGS ...]   configure credentials (no args = show status)
-  --proxy URL         proxy URL for this run (e.g. socks5://127.0.0.1:9050).
-                      Set XSINT_PROXY to persist.
-```
+## License
 
-## Common examples
+[GNU General Public License v3.0](LICENSE)
 
-```bash
-# Detect target type automatically
-xsint user@example.com
-xsint +14155551234
-xsint 8.8.8.8
-
-# Set target type explicitly
-xsint email:user@example.com
-xsint phone:+14155551234
-xsint user:johndoe
-xsint ip:8.8.8.8
-xsint "name:John Doe"
-xsint "addr:Tokyo, Japan"
-xsint hash:5f4dcc3b
-
-# Run through a proxy
-xsint --proxy socks5://127.0.0.1:9050 user@example.com
-```
-
-## Modules output
-
-`xsint -m` prints modules, whether each one is active or locked, and which input types each module supports.
-
-```text
-module          status  types
-ghunt_lookup    locked  EMAIL|PHONE
-gitfive_module  locked  EMAIL|USERNAME
-haxalot_module  locked  EMAIL|IP|PHONE|USERNAME
-hibp            active  EMAIL|HASH|PHONE|USERNAME
-intelx          locked  EMAIL|PHONE|USERNAME
-ip_basic        active  IP
-nineghz         active  EMAIL|HASH|ID|IP|NAME|PASSPORT|PHONE|SSN|USERNAME
-osm             active  ADDRESS
-phone_basic     active  PHONE
-```
-
-Use `xsint -m <type>` to filter by input type.
-
-## Module authentication
-
-Use `--auth` for API keys, login/setup flows, and auth status:
-
-```bash
-# View auth status
-xsint --auth
-
-# API key based modules
-xsint --auth hibp YOUR_HIBP_KEY
-xsint --auth intelx YOUR_INTELX_KEY
-xsint --auth 9ghz YOUR_9GHZ_KEY
-
-# Interactive module setup
-xsint --auth ghunt
-xsint --auth gitfive
-xsint --auth haxalot
-```
-
-## Notes
-
-- GHunt and GitFive require Python 3.10+.
-- If your wrapper bin directory is not in `PATH`, add it and reopen your terminal.
+Built for educational and authorized security research only.

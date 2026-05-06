@@ -77,7 +77,7 @@ def _run_external_login(service):
 
 def _print_auth_status():
     config = get_config()
-    api_auth_types = {"9ghz": "api_key(optional)", "hibp": "api_key", "intelx": "api_key"}
+    api_auth_types = {"9ghz": "api_key", "hibp": "api_key", "intelx": "api_key"}
 
     rows = []
     for service in sorted(api_auth_types):
@@ -154,7 +154,7 @@ def _build_modules_table(caps, type_filter="all"):
 
 
 HELP_TEXT = """\
-xsint - OSINT Switchblade ( https://github.com/memorypudding/xsint )
+xsint ( https://github.com/memorypudding/xsint )
 Usage: xsint [Options] {target}
 
 TARGET SPECIFICATION:
@@ -193,6 +193,10 @@ def main():
     parser.add_argument("-m", "--modules", nargs="?", const="all", metavar="TYPE")
     parser.add_argument("--auth", nargs="*", metavar="ARGS")
     parser.add_argument("--proxy", metavar="URL")
+
+    if len(sys.argv) == 1:
+        print(HELP_TEXT, end="")
+        return
 
     args = parser.parse_args()
 
@@ -263,42 +267,41 @@ async def async_main(args):
         get_config().data["proxy"] = args.proxy
 
     engine = XsintEngine(proxy=args.proxy)
+    try:
+        if args.modules:
+            caps = engine.get_capabilities()
+            type_filter = args.modules.lower()
+            if type_filter == "all" or type_filter in caps:
+                rows = _build_modules_table(caps, type_filter)
+                _print_table(("module", "source", "status", "types"), rows)
+            else:
+                print(f"[!] unknown type '{type_filter}'. available: {', '.join(sorted(caps))}", file=sys.stderr)
+            return
 
-    if args.modules:
-        caps = engine.get_capabilities()
-        type_filter = args.modules.lower()
-        if type_filter == "all" or type_filter in caps:
-            rows = _build_modules_table(caps, type_filter)
-            _print_table(("module", "source", "status", "types"), rows)
-        else:
-            print(f"[!] unknown type '{type_filter}'. available: {', '.join(sorted(caps))}", file=sys.stderr)
+        if not args.target:
+            print(HELP_TEXT, end="")
+            return
+
+        def on_progress(event):
+            kind = event.get("event")
+            if kind == "detect_done":
+                t = event.get("target_type")
+                print(f"[*] target type: {str(t).upper() if t else 'AMBIGUOUS'}")
+            elif kind == "modules_loaded":
+                count = int(event.get("count", 0))
+                skipped = len(event.get("skipped") or [])
+                extra = f" (skipped: {skipped})" if skipped else ""
+                print(f"[*] eligible modules: {count}{extra}")
+            elif kind == "module_done":
+                name = event.get("module", "?")
+                status = event.get("status", "ok")
+                print(f"[+] {name}: {status}")
+
+        report = await engine.scan(args.target, progress_cb=on_progress)
+        print()
+        print_results(report)
+    finally:
         await engine.close()
-        return
-
-    if not args.target:
-        print("missing target — example: xsint user:admin")
-        await engine.close()
-        return
-
-    def on_progress(event):
-        kind = event.get("event")
-        if kind == "detect_done":
-            t = event.get("target_type")
-            print(f"[*] target type: {str(t).upper() if t else 'AMBIGUOUS'}")
-        elif kind == "modules_loaded":
-            count = int(event.get("count", 0))
-            skipped = len(event.get("skipped") or [])
-            extra = f" (skipped: {skipped})" if skipped else ""
-            print(f"[*] eligible modules: {count}{extra}")
-        elif kind == "module_done":
-            name = event.get("module", "?")
-            status = event.get("status", "ok")
-            print(f"[+] {name}: {status}")
-
-    report = await engine.scan(args.target, progress_cb=on_progress)
-    print()
-    print_results(report)
-    await engine.close()
 
 
 if __name__ == "__main__":

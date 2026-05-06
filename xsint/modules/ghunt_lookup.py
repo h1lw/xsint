@@ -8,7 +8,8 @@ import builtins
 import getpass
 import base64
 from pathlib import Path
-from contextlib import redirect_stdout, redirect_stderr
+import io
+from contextlib import redirect_stdout
 from types import SimpleNamespace
 
 from xsint.config import get_config
@@ -83,13 +84,12 @@ async def _load_creds_non_interactive(client):
 
     builtins.input = _blocked_prompt
     getpass.getpass = _blocked_prompt
+    sink = io.StringIO()
     try:
-        with open(os.devnull, "w") as f, redirect_stdout(f), redirect_stderr(f):
+        with redirect_stdout(sink):
             try:
-                # Newer GHunt versions may support this flag.
                 return await auth.load_and_auth(client, interactive=False)
             except TypeError:
-                # Fallback for GHunt versions without the kwarg.
                 return await auth.load_and_auth(client)
     finally:
         builtins.input = original_input

@@ -29,10 +29,9 @@ def print_results(report):
         print(f"{source} ({len(items)})")
         max_label = max(len(_label(i)) for i in items)
         for item in items:
-            marker = _marker(item.get("risk"))
             label = _label(item).ljust(max_label)
             value = str(item.get("value", "N/A"))
-            print(f"  {marker} {label} : {value}")
+            print(f"  {label} : {value}")
         print()
 
 
@@ -40,12 +39,3 @@ def _label(item):
     label = str(item.get("label", "N/A"))
     group = item.get("group")
     return f"{group} / {label}" if group else label
-
-
-def _marker(risk):
-    val = str(risk or "low").lower()
-    if val in ("critical", "high"):
-        return "!"
-    if val == "medium":
-        return "~"
-    return "-"
