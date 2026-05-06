@@ -611,16 +611,20 @@ def _print_pretty(report, target):
 
     # ── DATES / ACTIVITY ──
     activity_lines = []
-    for label, src in bins["activity"]:
-        activity_lines.append(label)
+    for evt_label, _src in bins["activity"]:
+        activity_lines.append(evt_label)
     if bins["dates"]:
-        # Group dates by breach.
+        # Group dates by breach so we can collapse repeats.
         by_breach = {}
-        for label, val, breach in bins["dates"]:
-            by_breach.setdefault(breach, []).append(f"{label}: {val}")
+        for date_label, date_val, breach in bins["dates"]:
+            # Avoid "Zynga: Zynga: ..." when the date label IS the breach name.
+            if date_label.lower() == breach.lower():
+                by_breach.setdefault(breach, []).append(date_val)
+            else:
+                by_breach.setdefault(breach, []).append(f"{date_label}: {date_val}")
         for breach in sorted(by_breach):
-            for line in by_breach[breach][:5]:  # Cap per-breach to 5
-                activity_lines.append(f"{breach}: {line}")
+            for entry in by_breach[breach][:5]:
+                activity_lines.append(f"{breach}: {entry}")
     if activity_lines:
         _section_pretty("ACTIVITY", [("events", activity_lines)])
 
