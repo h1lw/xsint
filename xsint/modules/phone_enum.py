@@ -53,12 +53,17 @@ def _parse(target):
         return None, None
 
 
-# --- Amazon ---
-# Phone-number lookup goes through Amazon's /ax/claim unified flow which
-# requires a JS-generated metadata1 fingerprint and an anti-csrftoken-a2z
-# token Amazon's frontend computes from cookies. Both are out of reach
-# headlessly — every POST hits the WAF with HTTP 403 + "Page Not Found".
-# Removed for now; would require browser automation to bypass.
+# --- Amazon (unified-claim flow on amazon.com US) ---------------------------
+
+async def _chk_amazon(cc, num):
+    """Probe Amazon's /ax/claim with the E.164 phone number in the email
+    field. Amazon auto-detects phone vs email from the value, so we don't
+    need to set claimType. We always hit amazon.com (US) — regional
+    marketplaces like .co.jp WAF-block the unauthenticated /ax/claim path,
+    while .com accepts it the same way it accepts emails.
+    """
+    from xsint.modules.email_enum import _chk_shopping_amazon
+    return await _chk_shopping_amazon(f"+{cc}{num}")
 
 
 # --- Snapchat (signup phone validation) -------------------------------------
@@ -103,6 +108,7 @@ async def _chk_snapchat(cc, num):
 
 
 SERVICES = [
+    ("shopping", "Amazon", _chk_amazon),
     ("social", "Snapchat", _chk_snapchat),
 ]
 
