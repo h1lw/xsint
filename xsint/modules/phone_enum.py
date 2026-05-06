@@ -59,31 +59,59 @@ def _parse(target):
 
 # --- Amazon (login probe) ---------------------------------------------------
 
+# E.164 country code -> (regional Amazon domain, openid.assoc_handle)
+# Only marketplaces that accept E.164 phone numbers in the email field.
+_AMAZON_REGIONS = {
+    "1":   ("amazon.com",     "usflex"),
+    "44":  ("amazon.co.uk",   "gbflex"),
+    "49":  ("amazon.de",      "deflex"),
+    "33":  ("amazon.fr",      "frflex"),
+    "39":  ("amazon.it",      "itflex"),
+    "34":  ("amazon.es",      "esflex"),
+    "91":  ("amazon.in",      "inflex"),
+    "81":  ("amazon.co.jp",   "jpflex"),
+    "86":  ("amazon.cn",      "cnflex"),
+    "52":  ("amazon.com.mx",  "mxflex"),
+    "55":  ("amazon.com.br",  "brflex"),
+    "61":  ("amazon.com.au",  "auflex"),
+    "31":  ("amazon.nl",      "nlflex"),
+    "46":  ("amazon.se",      "seflex"),
+    "48":  ("amazon.pl",      "plflex"),
+    "90":  ("amazon.com.tr",  "trflex"),
+    "971": ("amazon.ae",      "aeflex"),
+    "966": ("amazon.sa",      "saflex"),
+    "20":  ("amazon.eg",      "egflex"),
+    "32":  ("amazon.com.be",  "beflex"),
+    "65":  ("amazon.sg",      "sgflex"),
+}
+
+
 async def _chk_amazon(cc, num):
-    show_url = "https://amazon.com"
+    domain, assoc = _AMAZON_REGIONS.get(cc, ("amazon.com", "usflex"))
+    show_url = f"https://{domain}"
+    base = f"https://www.{domain}"
+    return_to = f"{base}/"
+    signin_url = (
+        f"{base}/ap/signin?openid.pape.max_auth_age=0"
+        f"&openid.return_to={return_to}"
+        f"&openid.identity=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0%2Fidentifier_select"
+        f"&openid.assoc_handle={assoc}&openid.mode=checkid_setup"
+        f"&openid.claimed_id=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0%2Fidentifier_select"
+        f"&openid.ns=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0"
+    )
     headers = {"User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36"}
     try:
         async with httpx.AsyncClient(timeout=PER_CHECK_TIMEOUT, follow_redirects=True) as client:
-            r = await client.get(
-                "https://www.amazon.com/ap/signin?openid.pape.max_auth_age=0"
-                "&openid.return_to=https%3A%2F%2Fwww.amazon.com%2F"
-                "&openid.identity=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0%2Fidentifier_select"
-                "&openid.assoc_handle=usflex&openid.mode=checkid_setup"
-                "&openid.claimed_id=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0%2Fidentifier_select"
-                "&openid.ns=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0",
-                headers=headers,
-            )
-            # Lightweight HTML scrape (avoid bs4 dep)
+            r = await client.get(signin_url, headers=headers)
             import re
-            inputs = re.findall(r'<input[^>]+>', r.text)
             data = {}
-            for tag in inputs:
+            for tag in re.findall(r'<input[^>]+>', r.text):
                 m_name = re.search(r'name="([^"]+)"', tag)
                 m_val = re.search(r'value="([^"]*)"', tag)
                 if m_name:
                     data[m_name.group(1)] = m_val.group(1) if m_val else ""
             data["email"] = f"+{cc}{num}"
-            r2 = await client.post("https://www.amazon.com/ap/signin/", data=data, headers=headers)
+            r2 = await client.post(f"{base}/ap/signin/", data=data, headers=headers)
             if 'id="auth-password-missing-alert"' in r2.text:
                 return (True, show_url, None)
             return (False, show_url, None)
