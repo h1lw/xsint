@@ -7,9 +7,7 @@ in parallel and reports one finding per registered hit.
 Each check returns (hit: bool|None, url: str|None, extra: str|None).
 """
 import asyncio
-import hashlib
-import hmac
-import json
+import html
 import urllib.parse
 
 import httpx
@@ -131,20 +129,24 @@ async def _chk_amazon(cc, num):
                     data[m_name.group(1)] = m_val.group(1) if m_val else ""
 
             # Form action — usually a relative path on the same host.
+            # html.unescape collapses &amp; etc. so we don't end up POSTing
+            # to a literal-ampersand URL that Amazon 404s.
+            import html as _htmllib
             m_action = _re.search(r'<form[^>]+action="([^"]+)"', html)
-            action = m_action.group(1) if m_action else "/ap/signin/"
+            action = _htmllib.unescape(m_action.group(1)) if m_action else "/ap/signin/"
             if action.startswith("/"):
                 action = base + action
             elif not action.startswith("http"):
                 action = landed_url
 
-            # Override / add the phone-claim fields. Using setdefault preserves
-            # whatever the GET handed us when present.
+            # Override the phone-claim fields. Form ships these as empty
+            # placeholder hidden inputs that JS populates client-side, so we
+            # have to assign rather than setdefault.
             data["email"] = f"+{cc}{num}"
-            data.setdefault("password", "")
-            data.setdefault("claimType", "phoneNumber")
-            data.setdefault("countryCode", iso)
-            data.setdefault("isServerSideRouting", "true")
+            data["password"] = data.get("password", "")
+            data["claimType"] = "phoneNumber"
+            data["countryCode"] = iso
+            data["isServerSideRouting"] = "true"
             data.setdefault("claimCollectionWorkflow", "unified")
 
             post_headers = dict(headers)
@@ -172,52 +174,6 @@ async def _chk_amazon(cc, num):
             ):
                 return (True, show_url, None)
             return (False, show_url, None)
-    except Exception:
-        return (None, None, None)
-
-
-# --- Instagram (HMAC-signed users/lookup) -----------------------------------
-
-_IG_SIG_KEY = "e6358aeede676184b9fe702b30f4fd35e71744605e39d2181a34cede076b3c33"
-_IG_SIG_VER = "4"
-
-
-def _ig_sign(data):
-    digest = hmac.new(_IG_SIG_KEY.encode(), data.encode(), hashlib.sha256).hexdigest()
-    return f"ig_sig_key_version={_IG_SIG_VER}&signed_body={digest}.{urllib.parse.quote_plus(data)}"
-
-
-async def _chk_instagram(cc, num):
-    show_url = "https://instagram.com"
-    payload_json = json.dumps({
-        "login_attempt_count": "0",
-        "directly_sign_in": "true",
-        "source": "default",
-        "q": f"+{cc}{num}",
-        "ig_sig_key_version": _IG_SIG_VER,
-    })
-    body = _ig_sign(payload_json)
-    headers = {
-        "Accept-Language": "en-US",
-        "User-Agent": "Instagram 101.0.0.15.120",
-        "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
-        "X-FB-HTTP-Engine": "Liger",
-        "Connection": "close",
-    }
-    try:
-        async with httpx.AsyncClient(timeout=PER_CHECK_TIMEOUT) as client:
-            r = await client.post(
-                "https://i.instagram.com/api/v1/users/lookup/",
-                content=body, headers=headers,
-            )
-        try:
-            data = r.json()
-        except Exception:
-            return (None, None, None)
-        if data.get("message") == "No users found":
-            return (False, show_url, None)
-        # Anything else (a user object, hashed contact points, etc.) => exists
-        return (True, show_url, None)
     except Exception:
         return (None, None, None)
 
@@ -265,7 +221,6 @@ async def _chk_snapchat(cc, num):
 
 SERVICES = [
     ("shopping", "Amazon", _chk_amazon),
-    ("social", "Instagram", _chk_instagram),
     ("social", "Snapchat", _chk_snapchat),
 ]
 
