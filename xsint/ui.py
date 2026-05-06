@@ -579,7 +579,7 @@ def _bin_findings(results):
                 add("registered_on", service.lower(), (service, "EmailEnum"))
             elif "rate limited" in vl:
                 add("other", ("rl-" + label, value),
-                    (f"{label}: rate limited", "EmailEnum"))
+                    (label, "rate limited", "EmailEnum"))
             continue
 
         if source == "9Ghz":
@@ -627,7 +627,7 @@ def _bin_findings(results):
                 add("ids", (label, value), (label, value, "Haxalot"))
             else:
                 add("other", ("hax-" + label, value),
-                    (f"{label}: {value}", f"Haxalot/{breach_attr}"))
+                    (label, value, f"Haxalot/{breach_attr}"))
             continue
 
         add("other", (source + label, value), (label, value, source))
