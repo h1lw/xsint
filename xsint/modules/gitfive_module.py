@@ -187,7 +187,22 @@ async def run(session, target):
     if not ready:
         return 0, []
 
-    return await _run_lookup(target, PARENT)
+    # GitFive's metamon mixes async httpx with synchronous git subprocess
+    # calls (repo.git.commit_tree, push, write_tree…) and time.sleep(1)
+    # loops. Running it in the main event loop freezes the dashboard
+    # animator and stalls every other module while git churns. Run the
+    # whole lookup in a worker thread on its own event loop — the runner
+    # creates its own httpx client per call so there's no shared state
+    # to leak between loops.
+    return await asyncio.to_thread(_run_lookup_sync, target, PARENT)
+
+
+def _run_lookup_sync(target, PARENT):
+    loop = asyncio.new_event_loop()
+    try:
+        return loop.run_until_complete(_run_lookup(target, PARENT))
+    finally:
+        loop.close()
 
 
 async def _run_lookup(target, PARENT):

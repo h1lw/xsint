@@ -334,12 +334,14 @@ async def run(session, target):
     if html_content.startswith("ERROR:"):
         return 1, [{"label": "Bot Error", "value": html_content.replace("ERROR: ", ""), "source": PARENT, "risk": "high"}]
 
-    parsed_data = parse_html_report(html_content)
+    # parse_html_report (BeautifulSoup) and _summarize (lots of regex +
+    # dict ops on potentially huge reports) are CPU-bound and sync — run
+    # them in a worker thread so the live dashboard animator and any
+    # other concurrent module's I/O isn't frozen during parsing.
+    parsed_data = await asyncio.to_thread(parse_html_report, html_content)
+    summary = await asyncio.to_thread(_summarize, parsed_data, PARENT)
 
-    # Aggregate across breaches: bucket every (label, value) pair into a
-    # human-readable category, dedupe values, and remember which breaches
-    # each value came from. Easier to skim than the raw per-breach dump.
-    return 0, _summarize(parsed_data, PARENT)
+    return 0, summary
 
 
 # Order matters — first match wins. Plaintext password vs hashed-password
