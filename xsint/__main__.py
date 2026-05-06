@@ -1,11 +1,14 @@
 import argparse
 import asyncio
+import contextlib
 import getpass
 import importlib
+import io
 import os
 import shutil
 import subprocess
 import sys
+from pathlib import Path
 from urllib.parse import urlparse
 
 from . import __version__
@@ -233,10 +236,10 @@ NETWORK:
                  Set XSINT_PROXY in the environment to persist.
 
 OUTPUT FORMAT (mutually exclusive; default --raw):
-  --raw   : Plain text dump grouped by source (default)
-  --pretty: Synthesized identity dossier — deduped person summary
-  --json  : Full report as JSON (pipe to a file or another tool)
-  --html  : Self-contained HTML page (redirect to a .html file)
+  --raw         : Plain text dump grouped by source (default)
+  --pretty      : Synthesized identity dossier — deduped person summary
+  --json        : Full report as JSON (pipe to a file or another tool)
+  --html <PATH> : Self-contained HTML report written to PATH
 
 MISC:
   -V, --version: Print xsint version and exit
@@ -270,6 +273,24 @@ def _maybe_print_update_notice():
         print(f"    Update: curl -fsSL https://raw.githubusercontent.com/memorypudding/xsint/main/install.sh | bash", file=sys.stderr)
 
 
+def _write_html_report(report, target, path_str):
+    """Render the HTML report and write it to disk.
+
+    `print_results(fmt="html")` writes the markup to stdout; we capture
+    that here so the user gets a real file (`xsint --html report.html`)
+    instead of having to pipe it themselves.
+    """
+    path = Path(path_str).expanduser()
+    if path.parent and not path.parent.exists():
+        path.parent.mkdir(parents=True, exist_ok=True)
+
+    buf = io.StringIO()
+    with contextlib.redirect_stdout(buf):
+        print_results(report, target=target, fmt="html")
+    path.write_text(buf.getvalue(), encoding="utf-8")
+    print(f"[+] html report written to {path}", file=sys.stderr)
+
+
 def main():
     parser = _XsintParser(prog="xsint", add_help=True)
     parser.add_argument("target", nargs="?")
@@ -280,11 +301,14 @@ def main():
     parser.add_argument("--no-version-check", action="store_true")
 
     fmt_group = parser.add_mutually_exclusive_group()
-    fmt_group.add_argument("--raw", dest="fmt", action="store_const", const="raw")
-    fmt_group.add_argument("--pretty", dest="fmt", action="store_const", const="pretty")
-    fmt_group.add_argument("--json", dest="fmt", action="store_const", const="json")
-    fmt_group.add_argument("--html", dest="fmt", action="store_const", const="html")
-    parser.set_defaults(fmt="raw")
+    fmt_group.add_argument("--raw", action="store_true")
+    fmt_group.add_argument("--pretty", action="store_true")
+    fmt_group.add_argument("--json", action="store_true")
+    # --html requires a path: HTML reports are self-contained pages, not
+    # something you'd want dumped into a terminal. Force the user to name
+    # an output file so they get a usable artifact instead of a wall of
+    # markup on stdout.
+    fmt_group.add_argument("--html", metavar="PATH", default=None)
 
     if len(sys.argv) == 1:
         print(HELP_TEXT, end="")
@@ -292,6 +316,18 @@ def main():
         return
 
     args = parser.parse_args()
+
+    # Derive output format from the mutex group flags. Mutex enforcement
+    # means at most one of these is set; argparse already errored out if
+    # the user passed two.
+    if args.html is not None:
+        args.fmt = "html"
+    elif args.json:
+        args.fmt = "json"
+    elif args.pretty:
+        args.fmt = "pretty"
+    else:
+        args.fmt = "raw"
 
     if args.version:
         print(f"xsint {__version__}")
@@ -489,15 +525,17 @@ async def async_main(args):
                   file=sys.stderr)
             return
 
-        if not (report.get("results") or []):
-            # JSON/HTML still want a structured "empty" payload; raw/pretty
-            # can short-circuit with the friendlier message.
-            if args.fmt in ("json", "html"):
-                print_results(report, target=args.target, fmt=args.fmt)
-            else:
-                print("[!] no intel found", file=sys.stderr)
+        # JSON/HTML still want a structured "empty" payload, so they
+        # always render. Raw/pretty short-circuit on no results.
+        empty = not (report.get("results") or [])
+        if empty and args.fmt in ("raw", "pretty"):
+            print("[!] no intel found", file=sys.stderr)
+            return
+
+        if args.fmt == "html":
+            _write_html_report(report, args.target, args.html)
         else:
-            if args.fmt == "raw":
+            if args.fmt == "raw" and not empty:
                 print()
             print_results(report, target=args.target, fmt=args.fmt)
     finally:
