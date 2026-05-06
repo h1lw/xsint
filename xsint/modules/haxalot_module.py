@@ -385,8 +385,9 @@ _CATEGORY_ORDER = [
     "📋 Other",
 ]
 
-# Per-category cap so a noisy breach doesn't drown the report.
-_CATEGORY_LIMIT = 20
+# No per-category cap — caller wanted every unique value surfaced.
+# Filtering / truncation is the responsibility of the renderer.
+_CATEGORY_LIMIT = None
 
 
 def _classify(label: str) -> str:
@@ -477,7 +478,7 @@ def _summarize(parsed_data: dict, parent: str) -> list:
         # Sort by total occurrences (most reused first), then alphabetically.
         bucket.sort(key=lambda vb: (-sum(vb[1].values()), vb[0].lower()))
 
-        shown = bucket[:_CATEGORY_LIMIT]
+        shown = bucket if _CATEGORY_LIMIT is None else bucket[:_CATEGORY_LIMIT]
         for value, breaches in shown:
             results.append({
                 "label": _format_breaches(breaches),

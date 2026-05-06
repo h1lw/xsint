@@ -87,91 +87,254 @@ def _print_json(report, target):
 # ---------- html ----------
 
 _HTML_CSS = """
+:root { color-scheme: light dark; }
 * { box-sizing: border-box; }
 body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, sans-serif;
-       max-width: 980px; margin: 2rem auto; padding: 0 1.25rem; color: #1f2328; background: #fff; }
-header { border-bottom: 2px solid #d0d7de; padding-bottom: .9rem; margin-bottom: 1.2rem; }
-header h1 { margin: 0 0 .35rem; font-size: 1.35rem; font-weight: 600; }
-header .meta { color: #57606a; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-               font-size: .85rem; line-height: 1.5; }
-section { margin-bottom: 1.4rem; }
-section h2 { font-size: 1rem; font-weight: 600; margin: 0 0 .5rem;
-             padding-bottom: .25rem; border-bottom: 1px solid #d8dee4; }
-section .count { color: #57606a; font-weight: 400; font-size: .85rem; margin-left: .35rem; }
-table { border-collapse: collapse; width: 100%;
-        font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .82rem; }
-td { padding: .2rem .6rem .2rem 0; vertical-align: top; word-break: break-word; }
-td.label { color: #57606a; white-space: nowrap; padding-right: 1rem; }
-td.value { color: #1f2328; }
-td.value a { color: #0969da; text-decoration: none; }
-td.value a:hover { text-decoration: underline; }
-tr.crit td.value { color: #cf222e; }
-tr.high td.value { color: #9a6700; }
-footer { margin-top: 2rem; color: #8b949e; font-size: .75rem; text-align: center;
+       max-width: 1040px; margin: 2rem auto; padding: 0 1.25rem;
+       color: #1f2328; background: #fff; line-height: 1.5; }
+header.report-head { border-bottom: 2px solid #d0d7de; padding-bottom: 1rem; margin-bottom: 1.5rem; }
+header.report-head h1 { margin: 0 0 .5rem; font-size: 1.5rem; font-weight: 600; letter-spacing: -.01em; }
+header.report-head .meta { color: #57606a; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+                            font-size: .85rem; line-height: 1.6; }
+section.dossier { margin-bottom: 1.6rem; }
+section.dossier > h2 { font-size: 1rem; font-weight: 600; margin: 0 0 .55rem;
+                       padding-bottom: .35rem; border-bottom: 1px solid #d8dee4;
+                       text-transform: uppercase; letter-spacing: .05em; color: #57606a; }
+section.dossier > h2 .count { color: #8b949e; font-weight: 400; font-size: .8rem;
+                              margin-left: .4rem; text-transform: none; letter-spacing: 0; }
+.row { display: flex; gap: 1rem; padding: .25rem 0; }
+.row + .row { border-top: 1px dashed #eaeef2; }
+.row .label { flex: 0 0 9rem; color: #57606a; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+              font-size: .82rem; padding-top: .15rem; }
+.row .value { flex: 1; min-width: 0; }
+.row .value ul { margin: 0; padding: 0; list-style: none; }
+.row .value li { padding: .15rem 0; word-break: break-word; }
+.row .value li .attr { color: #8b949e; font-size: .8rem; margin-left: .5rem; }
+.row .value a { color: #0969da; text-decoration: none; word-break: break-all; }
+.row .value a:hover { text-decoration: underline; }
+.row .value .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .85rem; }
+.row .value .secret { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .85rem;
+                       background: #fff8c5; padding: 1px 6px; border-radius: 3px; }
+.row .value .hash { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: .8rem;
+                    color: #57606a; }
+.tag { display: inline-block; padding: 1px 8px; margin: 1px 4px 1px 0;
+       background: #ddf4ff; color: #0969da; border-radius: 12px; font-size: .8rem; }
+.breach-tag { background: #ffebe9; color: #cf222e; }
+footer { margin-top: 2.5rem; color: #8b949e; font-size: .75rem; text-align: center;
          border-top: 1px solid #d8dee4; padding-top: .75rem; }
+
+@media (prefers-color-scheme: dark) {
+  body { color: #c9d1d9; background: #0d1117; }
+  header.report-head { border-color: #30363d; }
+  header.report-head .meta { color: #8b949e; }
+  section.dossier > h2 { border-color: #30363d; color: #8b949e; }
+  .row + .row { border-color: #21262d; }
+  .row .label { color: #8b949e; }
+  .row .value li .attr { color: #6e7681; }
+  .row .value a { color: #58a6ff; }
+  .row .value .secret { background: #3a2d00; color: #f0883e; }
+  .row .value .hash { color: #8b949e; }
+  .tag { background: #1f3a5e; color: #58a6ff; }
+  .breach-tag { background: #5c1a1a; color: #ff7b72; }
+  footer { color: #6e7681; border-color: #30363d; }
+}
 """
 
 
 def _print_html(report, target):
+    """Render the identity dossier as a styled HTML page.
+
+    Same layout as --pretty (PERSON / ACCOUNTS / CONTACT / LOCATIONS /
+    BREACH EXPOSURE / CREDENTIALS LEAKED / ACTIVITY / LINKS) so the
+    formats stay aligned — the user reads either one and sees the same
+    information, just rendered differently.
+    """
     results = report.get("results", []) or []
     target_type = str(report.get("type", "unknown")).upper()
     target_str = target or "(unknown)"
     when = time.strftime("%Y-%m-%d %H:%M:%S %Z", time.localtime())
     error = report.get("error")
-
-    groups = {}
-    for item in results:
-        groups.setdefault(item.get("source", "unknown"), []).append(item)
+    sources = sorted({r.get("source") for r in results if r.get("source")})
 
     parts = [
         "<!DOCTYPE html>",
         '<html lang="en"><head>',
         '<meta charset="utf-8">',
-        f"<title>xsint report — {_html.escape(target_str)}</title>",
+        '<meta name="viewport" content="width=device-width, initial-scale=1">',
+        f"<title>xsint identity report — {_html.escape(target_str)}</title>",
         f"<style>{_HTML_CSS}</style>",
         "</head><body>",
-        "<header>",
+        '<header class="report-head">',
         "<h1>xsint identity report</h1>",
         '<div class="meta">',
-        f"target  : {_html.escape(target_str)}<br>",
+        f"target  : <strong>{_html.escape(target_str)}</strong><br>",
         f"type    : {_html.escape(target_type)}<br>",
         f"scanned : {_html.escape(when)}<br>",
-        f"findings: {len(results)} across {len(groups)} sources",
+        f"findings: {len(results)} across {len(sources)} source"
+        + ("s" if len(sources) != 1 else ""),
         "</div></header>",
     ]
 
     if error:
         parts.append(
-            f'<section><h2>Error</h2><pre>{_html.escape(str(error))}</pre></section>'
+            f'<section class="dossier"><h2>Error</h2>'
+            f'<pre>{_html.escape(str(error))}</pre></section>'
         )
     elif not results:
-        parts.append("<section><p>No findings.</p></section>")
+        parts.append('<section class="dossier"><p>No findings.</p></section>')
     else:
-        for source in sorted(groups):
-            items = groups[source]
-            parts.append("<section>")
-            parts.append(
-                f'<h2>{_html.escape(source)} <span class="count">({len(items)})</span></h2>'
+        bins = _bin_findings(results)
+
+        # PERSON
+        person_rows = []
+        if bins["names"]:
+            person_rows.append(("name", _html_attributed_list(bins["names"])))
+        if bins["aliases"]:
+            person_rows.append(("alias", _html_attributed_list(bins["aliases"])))
+        if bins["photos"]:
+            person_rows.append((
+                "photo",
+                _html_list([
+                    f'<a href="{_html.escape(v)}" target="_blank" rel="noopener">'
+                    f'{_html.escape(v)}</a>'
+                    for v, _ in bins["photos"]
+                ]),
+            ))
+        if person_rows:
+            parts.append(_html_section("Person", person_rows))
+
+        # ACCOUNTS
+        account_rows = []
+        for kind, value, src in bins["ids"]:
+            account_rows.append((
+                kind.lower(),
+                f'<span class="mono">{_html.escape(str(value))}</span>'
+                f' <span class="attr">({_html.escape(src)})</span>',
+            ))
+        if bins["registered_on"]:
+            services = sorted({s for s, _ in bins["registered_on"]}, key=str.lower)
+            tags = "".join(
+                f'<span class="tag">{_html.escape(s)}</span>' for s in services
             )
-            parts.append("<table>")
-            for item in items:
-                risk = (item.get("risk") or "").lower()
-                row_cls = ""
-                if risk == "critical":
-                    row_cls = ' class="crit"'
-                elif risk == "high":
-                    row_cls = ' class="high"'
-                label = _html.escape(_label(item))
-                value = _linkify_html(str(item.get("value", "")))
-                parts.append(
-                    f'<tr{row_cls}><td class="label">{label}</td>'
-                    f'<td class="value">{value}</td></tr>'
-                )
-            parts.append("</table></section>")
+            account_rows.append((f"registered ({len(services)})", tags))
+        if account_rows:
+            parts.append(_html_section("Accounts", account_rows))
+
+        # CONTACT
+        contact_rows = []
+        if bins["phones"]:
+            contact_rows.append(("phones", _html_attributed_list(bins["phones"])))
+        if bins["alt_emails"]:
+            contact_rows.append(("emails", _html_attributed_list(bins["alt_emails"])))
+        if contact_rows:
+            parts.append(_html_section("Contact", contact_rows))
+
+        # LOCATIONS
+        if bins["locations"]:
+            parts.append(_html_section("Locations", [
+                ("seen", _html_attributed_list(bins["locations"]))
+            ]))
+
+        # BREACH EXPOSURE
+        if bins["breaches"]:
+            tags = "".join(
+                f'<span class="tag breach-tag">'
+                f'{_html.escape(name)}'
+                f'{(" — " + _html.escape(date)) if date else ""}'
+                f' <span class="attr">[{_html.escape(src)}]</span>'
+                f'</span>'
+                for name, date, src in bins["breaches"]
+            )
+            parts.append(_html_section("Breach exposure", [
+                ("count", str(len(bins["breaches"]))),
+                ("breaches", tags),
+            ]))
+
+        # CREDENTIALS LEAKED
+        cred_rows = []
+        if bins["passwords"]:
+            cred_rows.append(("passwords",
+                _html_list([
+                    f'<span class="secret">{_html.escape(v)}</span>'
+                    f' <span class="attr">[{_html.escape(attr)}]</span>'
+                    for v, attr in bins["passwords"]
+                ])
+            ))
+        if bins["hashes"]:
+            cred_rows.append(("hashes",
+                _html_list([
+                    f'<span class="hash">{_html.escape(v)}</span>'
+                    f' <span class="attr">[{_html.escape(attr)}]</span>'
+                    for v, attr in bins["hashes"]
+                ])
+            ))
+        if cred_rows:
+            parts.append(_html_section("Credentials leaked", cred_rows))
+
+        # ACTIVITY
+        if bins["activity"]:
+            parts.append(_html_section("Activity", [
+                ("events",
+                 _html_list([_html.escape(label) for label, _src in bins["activity"]]))
+            ]))
+
+        # LINKS
+        if bins["links"]:
+            parts.append(_html_section("Links", [
+                ("seen",
+                 _html_list([
+                     f'<span class="attr">{_html.escape(label)}:</span> '
+                     f'<a href="{_html.escape(url)}" target="_blank" rel="noopener">'
+                     f'{_html.escape(url)}</a>'
+                     for label, url in bins["links"]
+                 ]))
+            ]))
+
+        # OTHER (anything we couldn't classify) — fold in last so nothing
+        # silently disappears.
+        if bins["other"]:
+            parts.append(_html_section("Other", [
+                ("misc",
+                 _html_list([
+                     f'<span class="attr">{_html.escape(str(a))}:</span> '
+                     f'{_linkify_html(str(b))} '
+                     f'<span class="attr">({_html.escape(str(c))})</span>'
+                     for a, b, c in bins["other"]
+                 ]))
+            ]))
 
     parts.append("<footer>generated by xsint</footer>")
     parts.append("</body></html>")
     print("\n".join(parts))
+
+
+def _html_section(title, rows):
+    body = []
+    body.append(f'<section class="dossier"><h2>{_html.escape(title)}</h2>')
+    for label, value in rows:
+        body.append(
+            f'<div class="row"><div class="label">{_html.escape(label)}</div>'
+            f'<div class="value">{value}</div></div>'
+        )
+    body.append("</section>")
+    return "\n".join(body)
+
+
+def _html_list(items):
+    if not items:
+        return ""
+    lis = "".join(f"<li>{i}</li>" for i in items)
+    return f"<ul>{lis}</ul>"
+
+
+def _html_attributed_list(items):
+    """Format a list of (value, attribution) into <li> entries."""
+    lis = "".join(
+        f'<li>{_html.escape(value)}'
+        f' <span class="attr">({_html.escape(attr)})</span></li>'
+        for value, attr in items
+    )
+    return f"<ul>{lis}</ul>"
 
 
 def _linkify_html(text):

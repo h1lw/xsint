@@ -26,6 +26,34 @@ try:
         "gitfive.lib.objects",
         "gitfive.lib.metamon",
     ])
+
+    # alive_progress writes terminal control codes to stderr directly
+    # (animated bars), bypassing print() so silence_module_prints can't
+    # catch it. Replace alive_bar with a no-op contextmanager in every
+    # gitfive submodule that imported it via `from alive_progress import
+    # alive_bar` — by the time we get here those names are already
+    # bound, so patching the source module isn't enough.
+    from contextlib import contextmanager as _cm
+    @_cm
+    def _silent_alive_bar(*args, **kwargs):
+        class _Bar:
+            def __call__(self, *a, **kw): pass
+            def text(self, *a, **kw): pass
+            def title(self, *a, **kw): pass
+        yield _Bar()
+    try:
+        import alive_progress as _ap
+        _ap.alive_bar = _silent_alive_bar
+        for _mod_name in ("gitfive.lib.metamon", "gitfive.lib.commits",
+                          "gitfive.lib.repos", "gitfive.lib.pea"):
+            try:
+                _m = __import__(_mod_name, fromlist=["alive_bar"])
+                if hasattr(_m, "alive_bar"):
+                    _m.alive_bar = _silent_alive_bar
+            except Exception:
+                pass
+    except Exception:
+        pass
 except Exception:
     GITFIVE_AVAILABLE = False
 
