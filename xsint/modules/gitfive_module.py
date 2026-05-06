@@ -1,5 +1,6 @@
 import asyncio
 import httpx
+import io
 import re
 import json
 import os
@@ -7,7 +8,7 @@ import builtins
 import getpass
 import base64
 from pathlib import Path
-from contextlib import redirect_stdout, redirect_stderr
+from contextlib import redirect_stdout
 
 from xsint.config import get_config
 
@@ -78,8 +79,9 @@ async def _login_non_interactive(runner):
 
     builtins.input = _blocked_prompt
     getpass.getpass = _blocked_prompt
+    sink = io.StringIO()
     try:
-        with open(os.devnull, "w") as f, redirect_stdout(f), redirect_stderr(f):
+        with redirect_stdout(sink):
             await asyncio.wait_for(runner.login(), timeout=LOGIN_TIMEOUT_SECONDS)
     finally:
         builtins.input = original_input
@@ -144,7 +146,6 @@ async def _scrape_commits(runner, repo_name, emails_index):
 
 
 async def run(session, target):
-    results = []
     PARENT = "GitFive"
 
     if not GITFIVE_AVAILABLE:
@@ -152,7 +153,6 @@ async def run(session, target):
             "label": "Not Installed",
             "value": "GitFive requires Python 3.10+ and must be installed via pipx: pipx install gitfive --python python3.10",
             "source": PARENT,
-            "risk": "low",
         }]
 
     ready, hint = is_ready()
@@ -161,11 +161,15 @@ async def run(session, target):
             "label": "Status",
             "value": f"Not configured ({hint})",
             "source": PARENT,
-            "risk": "low",
         }]
 
-    # FIX 1: Initialize this variable BEFORE the try block
-    # This prevents "cannot access local variable" errors in the 'finally' block
+    sink = io.StringIO()
+    with redirect_stdout(sink):
+        return await _run_lookup(target, PARENT)
+
+
+async def _run_lookup(target, PARENT):
+    results = []
     temp_repo_name = None
 
     # --- AUTH BRIDGE ---
