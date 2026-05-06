@@ -523,6 +523,31 @@ def _bin_findings(results):
         seen.add(sig)
         bins[bucket].append(payload)
 
+    # Breaches need cross-source merging — Haxalot, 9Ghz, HIBP, IntelX
+    # can all report the same breach name, and we want one row per breach
+    # with attribution like "Exploit.In [Haxalot, 9Ghz, HIBP]".
+    breach_merge: dict = {}
+
+    def merge_breach(name, date, src):
+        name = name.strip()
+        if not name or name.lower() in {"unknown", "summary", ""}:
+            return
+        key = _normalize_breach_key(name)
+        slot = breach_merge.setdefault(key, {
+            "name": name,
+            "date": "",
+            "sources": [],
+        })
+        # Prefer the longer/more specific casing if multiple sources
+        # disagree (e.g. "exploit.in" vs "Exploit.In").
+        if name and (len(name) > len(slot["name"]) or
+                      (name != slot["name"] and any(c.isupper() for c in name))):
+            slot["name"] = name
+        if date and not slot["date"]:
+            slot["date"] = date
+        if src and src not in slot["sources"]:
+            slot["sources"].append(src)
+
     for r in results:
         source = r.get("source", "") or ""
         group = r.get("group") or ""
@@ -582,24 +607,43 @@ def _bin_findings(results):
                     (label, "rate limited", "EmailEnum"))
             continue
 
-        if source == "9Ghz":
-            if label == "Breach":
-                m = re.match(r"^(.*?)\s*\(([^)]+)\)\s*$", value)
-                if m:
-                    add("breaches", m.group(1).strip().lower(),
-                        (m.group(1).strip(), m.group(2).strip(), "9Ghz"))
-                else:
-                    add("breaches", value.lower(), (value, "", "9Ghz"))
+        # Sources that report breach lists feed into the merger so the
+        # final dossier shows one row per breach with merged attribution.
+        if source in ("9Ghz", "HIBP") and label == "Breach":
+            m = re.match(r"^(.*?)\s*\(([^)]+)\)\s*$", value)
+            if m:
+                merge_breach(m.group(1).strip(), m.group(2).strip(), source)
+            else:
+                merge_breach(value, "", source)
+            continue
+
+        # IntelX records identify "name (bucket, date)" — name is the
+        # breach/leak label, bucket is the data store. Treat the name
+        # like any other breach hit so cross-source dedup works.
+        if source == "IntelX" and label.startswith("Result"):
+            m = re.match(r"^(.*?)\s*\(([^,]+),\s*([^)]+)\)\s*$", value)
+            if m:
+                merge_breach(m.group(1).strip(), m.group(3).strip(), "IntelX")
+            else:
+                merge_breach(value, "", "IntelX")
+            continue
+
+        if source in ("9Ghz", "HIBP", "IntelX"):
+            # Non-breach rows from these modules (counts, summaries) are
+            # already represented by the merged breach list, so skip them.
             continue
 
         if source == "Haxalot":
             cat, breach_attr = _haxalot_classify(group, label)
             if breach_attr and breach_attr.lower() not in ("unknown", "summary"):
-                first = breach_attr.split(",")[0].strip()
-                first = re.sub(r"\s*×\d+\s*$", "", first)
-                first = re.sub(r"\s*\+\d+\s*more\s*$", "", first)
-                if first:
-                    add("breaches", first.lower(), (first, "", "Haxalot"))
+                # breach_attr can look like "Foo ×3, Bar, +2 more" — split
+                # so each contributing breach feeds the merger separately.
+                for chunk in breach_attr.split(","):
+                    chunk = chunk.strip()
+                    chunk = re.sub(r"\s*×\d+\s*$", "", chunk)
+                    chunk = re.sub(r"\s*\+\d+\s*more\s*$", "", chunk)
+                    if chunk:
+                        merge_breach(chunk, "", "Haxalot")
 
             if cat == "passwords":
                 add("passwords", value, (value, breach_attr))
@@ -632,7 +676,37 @@ def _bin_findings(results):
 
         add("other", (source + label, value), (label, value, source))
 
+    # Materialize merged breaches: one row per unique breach, attribution
+    # joined by ", ". Cross-corroborated breaches (multiple sources) sort
+    # to the top so the user sees the high-confidence hits first.
+    for slot in sorted(
+        breach_merge.values(),
+        key=lambda s: (-len(s["sources"]), s["name"].lower()),
+    ):
+        bins["breaches"].append((
+            slot["name"],
+            slot["date"],
+            ", ".join(slot["sources"]),
+        ))
+
     return bins
+
+
+def _normalize_breach_key(name: str) -> str:
+    """Best-effort normalization for cross-source breach matching.
+
+    Strips trailing version markers, "database"/"dump" suffixes, year
+    suffixes, and casing so 9Ghz's "Exploit.In Database (2017)" merges
+    with HIBP's "exploit.in" and Haxalot's "Exploit.In".
+    """
+    s = name.strip().lower()
+    # Drop trailing parenthetical (years, sizes, "Breach", etc.)
+    s = re.sub(r"\s*\([^)]*\)\s*$", "", s)
+    # Drop common suffixes that vary across sources.
+    s = re.sub(r"\s+(database|dump|leak|breach|scrape|combolist|combo|dbs?)\s*$", "", s)
+    s = re.sub(r"\s+\d{4}\s*$", "", s)  # Trailing year
+    s = re.sub(r"\s+", " ", s).strip()
+    return s
 
 
 def _haxalot_classify(group, label):
