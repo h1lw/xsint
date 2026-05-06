@@ -27,6 +27,41 @@ try:
         "ghunt.objects.base",
     ])
     quiet_rich_console(ghunt_globals.rc)
+
+    # Defensive patch: ghunt 2.3.4's Person._scrape crashes with
+    # KeyError: 'container' when a coverPhoto entry's metadata lacks
+    # the 'container' field. Filter those entries before the upstream
+    # parser sees them.
+    try:
+        from ghunt.parsers import people as _ghunt_people
+
+        _orig_person_scrape = _ghunt_people.Person._scrape
+
+        async def _safe_person_scrape(self, as_client, person_data):
+            try:
+                cps = person_data.get("coverPhoto")
+                if isinstance(cps, list):
+                    person_data["coverPhoto"] = [
+                        cp for cp in cps
+                        if isinstance(cp, dict)
+                        and isinstance(cp.get("metadata"), dict)
+                        and "container" in cp["metadata"]
+                    ]
+                pps = person_data.get("profilePhoto")
+                if isinstance(pps, list):
+                    person_data["profilePhoto"] = [
+                        pp for pp in pps
+                        if isinstance(pp, dict)
+                        and isinstance(pp.get("metadata"), dict)
+                        and "container" in pp["metadata"]
+                    ]
+            except Exception:
+                pass
+            return await _orig_person_scrape(self, as_client, person_data)
+
+        _ghunt_people.Person._scrape = _safe_person_scrape
+    except Exception:
+        pass
 except Exception:
     GHUNT_AVAILABLE = False
 
@@ -280,4 +315,4 @@ async def _run_lookup(target, PARENT):
             for k, v in maps["stats"].items():
                 results.append({"label": k, "value": str(v), "source": PARENT, "group": grp_maps})
 
-    return 0, results
+    return len(results), results
