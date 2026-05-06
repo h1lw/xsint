@@ -145,6 +145,14 @@ async def _safe(name, url, fn, client, email):
         return name, url, None
 
 
+def _value(hit, url):
+    if hit is True:
+        return f"registered ({url})"
+    if hit is False:
+        return "not registered"
+    return "error"
+
+
 async def run(session, target):
     if "@" not in target:
         return 1, []
@@ -158,7 +166,7 @@ async def run(session, target):
         )
 
     findings = [
-        {"label": name, "value": url, "source": PARENT}
-        for name, url, hit in results if hit is True
+        {"label": name, "value": _value(hit, url), "source": PARENT}
+        for name, url, hit in results
     ]
     return 0, findings
