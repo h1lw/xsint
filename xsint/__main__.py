@@ -232,6 +232,12 @@ NETWORK:
   --proxy <URL>: Proxy URL for this run (http://, socks5://, ...)
                  Set XSINT_PROXY in the environment to persist.
 
+OUTPUT FORMAT (mutually exclusive; default --raw):
+  --raw   : Plain text dump grouped by source (default)
+  --pretty: Synthesized identity dossier — deduped person summary
+  --json  : Full report as JSON (pipe to a file or another tool)
+  --html  : Self-contained HTML page (redirect to a .html file)
+
 MISC:
   -V, --version: Print xsint version and exit
       --no-version-check: Skip the GitHub update check for this run
@@ -272,6 +278,13 @@ def main():
     parser.add_argument("--proxy", metavar="URL")
     parser.add_argument("-V", "--version", action="store_true")
     parser.add_argument("--no-version-check", action="store_true")
+
+    fmt_group = parser.add_mutually_exclusive_group()
+    fmt_group.add_argument("--raw", dest="fmt", action="store_const", const="raw")
+    fmt_group.add_argument("--pretty", dest="fmt", action="store_const", const="pretty")
+    fmt_group.add_argument("--json", dest="fmt", action="store_const", const="json")
+    fmt_group.add_argument("--html", dest="fmt", action="store_const", const="html")
+    parser.set_defaults(fmt="raw")
 
     if len(sys.argv) == 1:
         print(HELP_TEXT, end="")
@@ -390,7 +403,11 @@ async def async_main(args):
             return
 
         ran_any = False
-        animate = sys.stdout.isatty()
+        # Live dashboard would corrupt machine-readable output, so route
+        # progress to stderr (and disable the animator) for json/html.
+        quiet_progress = args.fmt in ("json", "html")
+        animate = sys.stdout.isatty() and not quiet_progress
+        progress_stream = sys.stderr if quiet_progress else sys.stdout
         # name -> {status: "running"|"done", count: int, status_str: str}
         modules_state = {}
         spinner_stop = asyncio.Event()
@@ -429,8 +446,8 @@ async def async_main(args):
                 if animate:
                     _render()
                 else:
-                    sys.stdout.write(f"[*] {name}: ...\n")
-                    sys.stdout.flush()
+                    progress_stream.write(f"[*] {name}: ...\n")
+                    progress_stream.flush()
             elif kind == "module_done":
                 ran_any = True
                 count = int(event.get("count", 0) or 0)
@@ -439,8 +456,8 @@ async def async_main(args):
                     _render()
                 else:
                     suffix = "s" if count != 1 else ""
-                    sys.stdout.write(f"[+] {name}: {count} result{suffix}\n")
-                    sys.stdout.flush()
+                    progress_stream.write(f"[+] {name}: {count} result{suffix}\n")
+                    progress_stream.flush()
 
         async def _animator():
             while not spinner_stop.is_set():
@@ -464,18 +481,25 @@ async def async_main(args):
                 _render()
 
         if report.get("error"):
-            print(f"[!] {report['error'].splitlines()[0]}")
+            print(f"[!] {report['error'].splitlines()[0]}", file=sys.stderr)
             return
 
         if not ran_any:
-            print("[!] no eligible modules — run --auth to enable more, or check `xsint -m`")
+            print("[!] no eligible modules — run --auth to enable more, or check `xsint -m`",
+                  file=sys.stderr)
             return
 
         if not (report.get("results") or []):
-            print("[!] no intel found")
+            # JSON/HTML still want a structured "empty" payload; raw/pretty
+            # can short-circuit with the friendlier message.
+            if args.fmt in ("json", "html"):
+                print_results(report, target=args.target, fmt=args.fmt)
+            else:
+                print("[!] no intel found", file=sys.stderr)
         else:
-            print()
-            print_results(report)
+            if args.fmt == "raw":
+                print()
+            print_results(report, target=args.target, fmt=args.fmt)
     finally:
         await engine.close()
 
