@@ -271,6 +271,17 @@ async def async_main(args):
         # in the engine already wire proxy explicitly via ProxyConnector.
         for var in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY"):
             os.environ[var] = proxy
+        # Intercept proxies (Burp, mitmproxy) present a self-signed CA. Default
+        # every httpx.AsyncClient to verify=False so SSL errors don't kill
+        # third-party modules that don't expose a verify kwarg of their own.
+        import httpx as _httpx
+        _orig_init = _httpx.AsyncClient.__init__
+        if not getattr(_httpx.AsyncClient, "_xsint_verify_patched", False):
+            def _patched_init(self, *a, **kw):
+                kw.setdefault("verify", False)
+                return _orig_init(self, *a, **kw)
+            _httpx.AsyncClient.__init__ = _patched_init
+            _httpx.AsyncClient._xsint_verify_patched = True
 
     engine = XsintEngine(proxy=proxy)
     try:
