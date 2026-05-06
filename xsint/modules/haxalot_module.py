@@ -353,9 +353,9 @@ _CATEGORY_RULES = [
     ("📱 Phones",      lambda s: "phone" in s or s == "mobile" or "mobile operator" in s),
     ("📧 Emails",      lambda s: "email" in s or "e-mail" in s),
     ("📍 Locations",   lambda s: any(k in s for k in [
-        "address", "adres", "city", "region", "country", "stat", "postal",
+        "address", "adres", "city", "region", "country", "state ", "postal",
         "pin code", "zip", "latitude", "longitude",
-    ])),
+    ]) or s.strip() == "state"),
     # Aliases come before Names so "Nick" / "Username" / "Handle" don't
     # get caught by the Names rule's loose "name" substring match.
     ("👥 Aliases",     lambda s: ("nick" in s or "username" in s

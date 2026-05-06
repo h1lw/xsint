@@ -472,169 +472,206 @@ def _linkify_html(text):
 # ---------- pretty (identity dossier) ----------
 
 def _print_pretty(report, target):
-    target_type = str(report.get("type", "unknown")).upper()
+    target_type = str(report.get("type", "unknown")).lower()
     error = report.get("error")
-    width = 72
-    line = "=" * width
-    sep = "─" * width
+    width = 78
 
-    print(line)
-    print(f"  IDENTITY REPORT  —  {target or '(unknown)'}")
-    print(line)
-    print(f"  type     : {target_type}")
-    print(f"  scanned  : {time.strftime('%Y-%m-%d %H:%M', time.localtime())}")
+    # Color codes — only when stdout is a real TTY; piped/file output
+    # stays clean.
+    is_tty = __import__("sys").stdout.isatty()
+    BOLD = "\033[1m" if is_tty else ""
+    DIM = "\033[2m" if is_tty else ""
+    YEL = "\033[33m" if is_tty else ""
+    GRN = "\033[32m" if is_tty else ""
+    RED = "\033[31m" if is_tty else ""
+    RST = "\033[0m" if is_tty else ""
+
+    # Header banner
+    print()
+    print(f"  {BOLD}IDENTITY REPORT{RST}")
+    print(f"  {target or '(unknown)'}")
+    print(f"  {DIM}{'─' * (width - 4)}{RST}")
 
     if error:
-        print("  status   : aborted")
-        print(f"  error    : {error}")
-        print(line)
+        print(f"  status    {RED}aborted{RST}")
+        print(f"  error     {error}")
+        print()
         return
 
     results = report.get("results", []) or []
     sources = sorted({r.get("source") for r in results if r.get("source")})
 
     if not results:
-        print("  status   : no intel found")
-        print(line)
+        print(f"  status    {DIM}no intel found{RST}")
+        print()
         return
 
     bins = _bin_findings(results, target=target)
 
-    print(
-        f"  sources  : {len(sources)} modules • "
-        f"{len(bins['breaches'])} breaches • "
-        f"{len(bins['passwords'])} passwords • "
-        f"{len(bins['hashes'])} hashes"
+    print(f"  type      {target_type}")
+    print(f"  scanned   {time.strftime('%Y-%m-%d %H:%M', time.localtime())}")
+    scope = (
+        f"{len(sources)} sources · {len(bins['breaches'])} breaches · "
+        f"{len(bins['passwords'])} passwords · {len(bins['hashes'])} hashes"
     )
-    print(sep)
+    print(f"  scope     {DIM}{scope}{RST}")
     print()
 
-    # ── IDENTITY ──
-    id_rows = []
-    if bins["names"]:
-        # Authoritative first (third tuple element non-empty), then matched.
-        lines = []
-        for name, breaches, auth in bins["names"]:
-            if auth:
-                lines.append(f"{name}  [{auth}]")
-            elif breaches:
-                lines.append(f"{name}  [{', '.join(breaches)}]")
+    # ── Local helpers wired to the live color flags ──
+    def _section(title, count=None):
+        heading = title.upper()
+        if count is not None:
+            heading += f"  ·  {count}"
+        print()
+        print(f"  {BOLD}{heading}{RST}")
+        print(f"  {DIM}{'─' * len(heading)}{RST}")
+
+    def _row(label, value, attr=None, value_color=""):
+        """Emit a single row.  Attr is rendered dim, right-aligned when it
+        fits on the same line; otherwise it falls onto a continuation line."""
+        label_w = 11
+        indent = "  "
+        label_str = (label or "").ljust(label_w)
+        v = str(value)
+        full_value = f"{value_color}{v}{RST}" if value_color else v
+
+        if not attr:
+            print(f"{indent}{label_str}{full_value}")
+            return
+
+        # Visible-width check (ignores ANSI codes).
+        bare = f"{indent}{label_str}{v}  {attr}"
+        if len(bare) <= width:
+            pad = width - len(f"{indent}{label_str}{v}{attr}")
+            print(f"{indent}{label_str}{full_value}{' ' * pad}{DIM}{attr}{RST}")
+        else:
+            print(f"{indent}{label_str}{full_value}")
+            print(f"{indent}{' ' * label_w}{DIM}└─ {attr}{RST}")
+
+    def _multirow(label, items):
+        """First item gets the label, rest get blank label."""
+        if not items:
+            return
+        first = True
+        for entry in items:
+            if isinstance(entry, tuple):
+                value, attr = entry
             else:
-                lines.append(name)
-        id_rows.append(("name", lines))
-    if bins["photos"]:
-        id_rows.append(("photo", [v for v, _ in bins["photos"]]))
-    for kind, value, src in bins["ids"]:
-        id_rows.append((kind.lower(), f"{value}  [{src}]"))
-    if id_rows:
-        _section_pretty("IDENTITY", id_rows)
+                value, attr = entry, None
+            _row(label if first else "", value, attr)
+            first = False
 
-    # ── ALIASES / HANDLES ──
+    # ── Identity ─────────────────────────────────
+    id_items = []
+    for name, breaches, auth in bins["names"]:
+        attr = auth if auth else (", ".join(breaches) if breaches else None)
+        id_items.append((name, attr))
+    if id_items or bins["photos"] or bins["ids"]:
+        _section("Identity")
+        if id_items:
+            _multirow("name", id_items)
+        for url, _ in bins["photos"]:
+            _row("photo", url)
+        for kind, value, src in bins["ids"]:
+            _row(kind.lower(), value, src)
+
+    # ── Aliases ──────────────────────────────────
     if bins["aliases"]:
-        lines = []
+        _section("Aliases", count=len(bins["aliases"]))
         for value, breaches in bins["aliases"]:
-            tag = f"  [{', '.join(breaches)}]" if breaches else ""
-            lines.append(f"{value}{tag}")
-        _section_pretty("ALIASES", [("handles", lines)])
+            attr = ", ".join(breaches) if breaches else None
+            _row("", value, attr)
 
-    # ── ACCOUNTS REGISTERED ──
+    # ── Registered accounts ──────────────────────
     if bins["registered_on"]:
         services = sorted({s for s, _ in bins["registered_on"]}, key=str.lower)
-        _section_pretty(
-            f"REGISTERED ACCOUNTS ({len(services)})",
-            [("services", _wrap(" • ".join(services), 64))],
-        )
+        _section("Registered accounts", count=len(services))
+        for line in _wrap(" · ".join(services), width - 4):
+            print(f"  {line}")
 
-    # ── CONTACT ──
-    contact_rows = []
-    if bins["phones"]:
-        contact_rows.append(("phones", [
-            f"{v}  [{', '.join(b)}]" if b else v for v, b in bins["phones"]
-        ]))
-    if bins["alt_emails"]:
-        contact_rows.append(("emails", [
-            f"{v}  [{', '.join(b)}]" if b else v for v, b in bins["alt_emails"]
-        ]))
-    if bins["carriers"]:
-        contact_rows.append(("carriers", [
-            f"{v}  [{', '.join(b)}]" if b else v for v, b in bins["carriers"]
-        ]))
-    if bins["ips"]:
-        contact_rows.append(("ip seen", [
-            f"{v}  [{', '.join(b)}]" if b else v for v, b in bins["ips"]
-        ]))
-    if contact_rows:
-        _section_pretty("CONTACT", contact_rows)
+    # ── Contact ──────────────────────────────────
+    contact_blocks = [
+        ("phones",   bins["phones"]),
+        ("emails",   bins["alt_emails"]),
+        ("ip seen",  bins["ips"]),
+        ("carriers", bins["carriers"]),
+    ]
+    if any(b for _, b in contact_blocks):
+        _section("Contact")
+        for label, items in contact_blocks:
+            if not items:
+                continue
+            _multirow(label, [
+                (v, ", ".join(b) if b else None) for v, b in items
+            ])
 
-    # ── LOCATIONS ──
+    # ── Locations ────────────────────────────────
     if bins["locations"]:
-        loc_lines = [
-            f"{v}  [{', '.join(b)}]" if b else v
-            for v, b in bins["locations"]
-        ]
-        _section_pretty(f"LOCATIONS ({len(loc_lines)})",
-                         [("seen", loc_lines)])
+        _section("Locations", count=len(bins["locations"]))
+        _multirow("seen", [
+            (v, ", ".join(b) if b else None) for v, b in bins["locations"]
+        ])
 
-    # ── BREACH HISTORY ──
+    # ── Breach history ───────────────────────────
     if bins["breaches"]:
+        _section("Breach history", count=len(bins["breaches"]))
         dated, undated = [], []
         for name, date, src in bins["breaches"]:
             if date:
-                dated.append(f"{date:<12}{name}  [{src}]")
+                dated.append((date, name, src))
             else:
-                undated.append(f"{'':<12}{name}  [{src}]")
-        # Dated breaches first (sorted descending by date), then undated.
+                undated.append((name, src))
         dated.sort(reverse=True)
-        rows = []
-        if dated:
-            rows.append(("dated", dated))
-        if undated:
-            rows.append(("undated", undated))
-        _section_pretty(f"BREACH HISTORY ({len(bins['breaches'])})", rows)
+        for date, name, src in dated:
+            _row("", f"{date}  {name}", src)
+        if dated and undated:
+            print()
+        for name, src in undated:
+            _row("", name, src)
 
-    # ── CREDENTIALS LEAKED ──
-    cred_rows = []
-    if bins["passwords"]:
-        lines = [
-            f"{v:<32}  [{', '.join(b)}]" if b else v
-            for v, b in bins["passwords"]
-        ]
-        cred_rows.append((f"passwords ({len(bins['passwords'])})", lines))
-    if bins["hashes"]:
-        lines = [
-            f"{v:<48}  [{', '.join(b)}]" if b else v
-            for v, b in bins["hashes"]
-        ]
-        cred_rows.append((f"hashes ({len(bins['hashes'])})", lines))
-    if cred_rows:
-        _section_pretty("CREDENTIALS LEAKED", cred_rows)
+    # ── Credentials leaked ───────────────────────
+    if bins["passwords"] or bins["hashes"]:
+        _section("Credentials leaked")
+        if bins["passwords"]:
+            _multirow(f"passwords {DIM}({len(bins['passwords'])}){RST}", [
+                (v, ", ".join(b) if b else None) for v, b in bins["passwords"]
+            ])
+        if bins["hashes"]:
+            if bins["passwords"]:
+                print()
+            _multirow(f"hashes {DIM}({len(bins['hashes'])}){RST}", [
+                (v, ", ".join(b) if b else None) for v, b in bins["hashes"]
+            ])
 
-    # ── DATES / ACTIVITY ──
-    activity_lines = []
-    for evt_label, _src in bins["activity"]:
-        activity_lines.append(evt_label)
+    # ── Activity ─────────────────────────────────
+    activity_lines = [evt for evt, _src in bins["activity"]]
     if bins["dates"]:
-        # Group dates by breach so we can collapse repeats.
         by_breach = {}
         for date_label, date_val, breach in bins["dates"]:
-            # Avoid "Zynga: Zynga: ..." when the date label IS the breach name.
-            if date_label.lower() == breach.lower():
+            norm = re.sub(r"\s*×\d+\s*$", "", date_label)
+            norm = re.sub(r"\s*\+\d+\s*more\s*$", "", norm)
+            if norm.lower().strip() == breach.lower().strip():
                 by_breach.setdefault(breach, []).append(date_val)
             else:
-                by_breach.setdefault(breach, []).append(f"{date_label}: {date_val}")
+                by_breach.setdefault(breach, []).append(f"{norm}: {date_val}")
         for breach in sorted(by_breach):
             for entry in by_breach[breach][:5]:
-                activity_lines.append(f"{breach}: {entry}")
+                activity_lines.append((entry, breach))
     if activity_lines:
-        _section_pretty("ACTIVITY", [("events", activity_lines)])
+        _section("Activity")
+        for item in activity_lines:
+            if isinstance(item, tuple):
+                _row("", item[0], item[1])
+            else:
+                _row("", item)
 
-    # ── LINKS ──
+    # ── Links ────────────────────────────────────
     if bins["links"]:
-        link_lines = [f"{label}: {url}" for label, url in bins["links"]]
-        _section_pretty(f"LINKS ({len(link_lines)})",
-                         [("seen", link_lines)])
+        _section("Links", count=len(bins["links"]))
+        for label, url in bins["links"]:
+            _row("", url, label)
 
-    print(line)
+    print()
 
 
 def _section_pretty(title, rows):
@@ -1096,8 +1133,8 @@ def _haxalot_classify(group, label):
     if "name" in field or "surname" in field:
         return "names", breach
     if any(k in field for k in ("address", "adres", "city", "region", "country",
-                                "stat", "postal", "pin code", "zip",
-                                "latitude", "longitude")):
+                                "state ", "postal", "pin code", "zip",
+                                "latitude", "longitude")) or field.strip() == "state":
         return "locations", breach
     if "date" in field or "activity" in field or "registration" in field:
         return "dates", breach
