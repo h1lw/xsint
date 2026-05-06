@@ -174,6 +174,9 @@ NETWORK:
   --proxy <URL>: Proxy URL for this run (http://, socks5://, ...)
                  Set XSINT_PROXY in the environment to persist.
 
+OUTPUT:
+  --show-found: Print the full findings report after the scan
+
 MISC:
   -h, --help: Print this help summary
 """
@@ -193,6 +196,7 @@ def main():
     parser.add_argument("-m", "--modules", nargs="?", const="all", metavar="TYPE")
     parser.add_argument("--auth", nargs="*", metavar="ARGS")
     parser.add_argument("--proxy", metavar="URL")
+    parser.add_argument("--show-found", action="store_true")
 
     if len(sys.argv) == 1:
         print(HELP_TEXT, end="")
@@ -283,23 +287,15 @@ async def async_main(args):
             return
 
         def on_progress(event):
-            kind = event.get("event")
-            if kind == "detect_done":
-                t = event.get("target_type")
-                print(f"[*] target type: {str(t).upper() if t else 'AMBIGUOUS'}")
-            elif kind == "modules_loaded":
-                count = int(event.get("count", 0))
-                skipped = len(event.get("skipped") or [])
-                extra = f" (skipped: {skipped})" if skipped else ""
-                print(f"[*] eligible modules: {count}{extra}")
-            elif kind == "module_done":
+            if event.get("event") == "module_done":
                 name = event.get("module", "?")
                 status = event.get("status", "ok")
                 print(f"[+] {name}: {status}")
 
         report = await engine.scan(args.target, progress_cb=on_progress)
-        print()
-        print_results(report)
+        if args.show_found:
+            print()
+            print_results(report)
     finally:
         await engine.close()
 

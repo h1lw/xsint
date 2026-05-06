@@ -46,14 +46,18 @@ MISC:
 
 ## Output
 
-Each scan prints two phases:
-
-1. **Live status** — per-module dispatch and completion lines.
-2. **Final report** — findings grouped by source, sorted alphabetically.
+By default, `xsint` prints one line per module with its run status:
 
 ```text
-[*] target type: EMAIL
-[*] eligible modules: 4
+[+] hibp: ok
+[+] nineghz: ok
+[+] haxalot_module: ok
+[+] email_basic: ok
+```
+
+Pass `--show-found` to also print the full findings report after the scan:
+
+```text
 [+] hibp: ok
 [+] nineghz: ok
 [+] haxalot_module: ok

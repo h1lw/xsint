@@ -119,7 +119,6 @@ async def get_gmaps_profile(client, gaia_id):
     return result
 
 async def run(session, target):
-    results = []
     PARENT = "GHunt"
 
     if not GHUNT_AVAILABLE:
@@ -127,7 +126,6 @@ async def run(session, target):
             "label": "Not Installed",
             "value": "GHunt requires Python 3.10+ and must be installed via pipx: pipx install ghunt --python python3.10",
             "source": PARENT,
-            "risk": "low",
         }]
 
     ready, hint = is_ready()
@@ -136,9 +134,15 @@ async def run(session, target):
             "label": "Status",
             "value": f"Not configured ({hint})",
             "source": PARENT,
-            "risk": "low",
         }]
 
+    sink = io.StringIO()
+    with redirect_stdout(sink):
+        return await _run_lookup(target, PARENT)
+
+
+async def _run_lookup(target, PARENT):
+    results = []
     config = get_config()
     proxy = config.get("proxy")
     proxies = {"http://": proxy, "https://": proxy} if proxy else None
