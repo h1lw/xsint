@@ -283,6 +283,8 @@ async def async_main(args):
             return
 
         ran_any = False
+        spinner_stop = asyncio.Event()
+        animate = sys.stdout.isatty()
 
         def on_progress(event):
             nonlocal ran_any
@@ -290,9 +292,33 @@ async def async_main(args):
                 ran_any = True
                 name = event.get("module", "?")
                 status = event.get("status", "ok")
-                print(f"[+] {name}: {status}")
+                if animate:
+                    # Clear spinner line, print status, spinner redraws on next tick.
+                    sys.stdout.write("\r\033[2K")
+                sys.stdout.write(f"[+] {name}: {status}\n")
+                sys.stdout.flush()
 
-        report = await engine.scan(args.target, progress_cb=on_progress)
+        async def _spinner():
+            frames = [".  ", ".. ", "...", " ..", "  .", "   "]
+            i = 0
+            while not spinner_stop.is_set():
+                sys.stdout.write(f"\r\033[2K[*] searching{frames[i % len(frames)]}")
+                sys.stdout.flush()
+                i += 1
+                try:
+                    await asyncio.wait_for(spinner_stop.wait(), timeout=0.18)
+                except asyncio.TimeoutError:
+                    pass
+            sys.stdout.write("\r\033[2K")
+            sys.stdout.flush()
+
+        spinner_task = asyncio.create_task(_spinner()) if animate else None
+        try:
+            report = await engine.scan(args.target, progress_cb=on_progress)
+        finally:
+            spinner_stop.set()
+            if spinner_task:
+                await spinner_task
 
         if not ran_any:
             print("[!] no eligible modules — run --auth to enable more, or check `xsint -m`")
