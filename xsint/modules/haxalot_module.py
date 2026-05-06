@@ -4,6 +4,8 @@ import re
 import sys
 import os
 import logging
+import shutil
+from pathlib import Path
 from bs4 import BeautifulSoup, NavigableString
 from telethon import TelegramClient
 from xsint.config import get_config
@@ -16,7 +18,54 @@ API_ID = 23268457
 API_HASH = "6f9d49402bd4eee4de800dd861d7c549"
 BOT = "haxalotBot"
 TIMEOUT = 25
-SESSION_NAME = "haxalot_session"
+
+# Telethon takes a "session name" (path without the .session suffix) and
+# writes "<session_name>.session" next to it. Pin this to a stable path
+# under the user's config dir so xsint --auth haxalot works regardless
+# of where the user later runs xsint from.
+_CONFIG_DIR = Path.home() / ".config" / "xsint"
+SESSION_NAME = str(_CONFIG_DIR / "haxalot_session")
+SESSION_FILE = SESSION_NAME + ".session"
+
+
+def _ensure_session_dir():
+    _CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _migrate_legacy_session():
+    """Relocate a session file dropped by an earlier xsint to the config dir.
+
+    Older versions wrote `haxalot_session.session` next to wherever the
+    user happened to be standing when they ran `xsint --auth haxalot`.
+    Pick the most-recently-modified candidate and move it into the new
+    canonical location so the existing login keeps working.
+    """
+    if os.path.isfile(SESSION_FILE):
+        return
+    candidates = [
+        Path.cwd() / "haxalot_session.session",
+        Path.home() / "haxalot_session.session",
+        Path.home() / ".local" / "share" / "xsint" / "haxalot_session.session",
+    ]
+    existing = [p for p in candidates if p.is_file()]
+    if not existing:
+        return
+    existing.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+    try:
+        _ensure_session_dir()
+        shutil.move(str(existing[0]), SESSION_FILE)
+        # Best-effort: clean up older duplicates so we don't migrate the
+        # same files again on the next run.
+        for p in existing[1:]:
+            try:
+                p.unlink()
+            except Exception:
+                pass
+    except Exception:
+        pass
+
+
+_migrate_legacy_session()
 
 INFO = {
     "free": ["email", "username", "phone", "ip"],
@@ -40,8 +89,7 @@ def is_ready():
     cfg = get_config()
     if not cfg.get("haxalot_enabled", False):
         return False, "run xsint --auth haxalot"
-    session_file = SESSION_NAME + ".session"
-    if os.path.isfile(session_file):
+    if os.path.isfile(SESSION_FILE):
         return True, ""
     return False, "run xsint --auth haxalot"
 
@@ -68,15 +116,17 @@ async def setup():
     print("-----------------------------------")
     print("This will create a local session file to authenticate with Telegram.")
     print("You will need your phone number and the OTP code sent to your Telegram app.\n")
-    
+
+    _ensure_session_dir()
+
     # We use 'start()' here because it handles the interactive phone/code prompt automatically
     async with TelegramClient(SESSION_NAME, API_ID, API_HASH) as client:
         await client.start()
-        
+
         me = await client.get_me()
         get_config().set("haxalot_enabled", True)
         print(f"\n[+] Successfully logged in as: {me.username}")
-        print(f"[+] Session saved to: {os.path.abspath(SESSION_NAME + '.session')}")
+        print(f"[+] Session saved to: {SESSION_FILE}")
         print("[+] Haxalot is now ready for use.")
 
 # Substrings the bot uses when nothing matches the query. If we see one
