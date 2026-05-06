@@ -235,9 +235,9 @@ NETWORK:
   --proxy <URL>: Proxy URL for this run (http://, socks5://, ...)
                  Set XSINT_PROXY in the environment to persist.
 
-OUTPUT FORMAT (mutually exclusive; default --raw):
-  --raw         : Plain text dump grouped by source (default)
-  --pretty      : Synthesized identity dossier — deduped person summary
+OUTPUT FORMAT (mutually exclusive; default --pretty):
+  --pretty      : Synthesized identity dossier (default) — deduped person summary
+  --raw         : Plain text dump grouped by source
   --json        : Full report as JSON (pipe to a file or another tool)
   --html <PATH> : Self-contained HTML report written to PATH
 
@@ -319,15 +319,17 @@ def main():
 
     # Derive output format from the mutex group flags. Mutex enforcement
     # means at most one of these is set; argparse already errored out if
-    # the user passed two.
+    # the user passed two. Default is --pretty (the synthesized dossier);
+    # --raw gives the legacy source-grouped dump for tooling that parses
+    # it.
     if args.html is not None:
         args.fmt = "html"
     elif args.json:
         args.fmt = "json"
-    elif args.pretty:
-        args.fmt = "pretty"
-    else:
+    elif args.raw:
         args.fmt = "raw"
+    else:
+        args.fmt = "pretty"
 
     if args.version:
         print(f"xsint {__version__}")
