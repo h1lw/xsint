@@ -263,10 +263,16 @@ def _handle_auth(auth_args):
 
 
 async def async_main(args):
-    if args.proxy:
-        get_config().data["proxy"] = args.proxy
+    proxy = args.proxy or get_config().get("proxy")
+    if proxy:
+        get_config().data["proxy"] = proxy
+        # Make every httpx client created by any module pick up the proxy
+        # automatically via trust_env=True (httpx default). aiohttp clients
+        # in the engine already wire proxy explicitly via ProxyConnector.
+        for var in ("HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY"):
+            os.environ[var] = proxy
 
-    engine = XsintEngine(proxy=args.proxy)
+    engine = XsintEngine(proxy=proxy)
     try:
         if args.modules:
             caps = engine.get_capabilities()
