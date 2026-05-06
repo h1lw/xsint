@@ -1,6 +1,5 @@
 import asyncio
 import httpx
-import io
 import re
 import json
 import os
@@ -8,9 +7,9 @@ import builtins
 import getpass
 import base64
 from pathlib import Path
-from contextlib import redirect_stdout
 
 from xsint.config import get_config
+from xsint._silence import silenced_stdout
 
 # GitFive requires Python 3.10+ and must be installed separately via pipx
 try:
@@ -79,9 +78,8 @@ async def _login_non_interactive(runner):
 
     builtins.input = _blocked_prompt
     getpass.getpass = _blocked_prompt
-    sink = io.StringIO()
     try:
-        with redirect_stdout(sink):
+        with silenced_stdout():
             await asyncio.wait_for(runner.login(), timeout=LOGIN_TIMEOUT_SECONDS)
     finally:
         builtins.input = original_input
@@ -163,9 +161,7 @@ async def run(session, target):
             "source": PARENT,
         }]
 
-    sink = io.StringIO()
-    with redirect_stdout(sink):
-        return await _run_lookup(target, PARENT)
+    return await _run_lookup(target, PARENT)
 
 
 async def _run_lookup(target, PARENT):
@@ -218,7 +214,8 @@ async def _run_lookup(target, PARENT):
         username = target
         if "@" in target:
             # Email flow: use metamon commit spoofing to resolve email -> username
-            resolve_repo, emails_index = await metamon.start(runner, [target])
+            with silenced_stdout():
+                resolve_repo, emails_index = await metamon.start(runner, [target])
             emails_accounts = await _scrape_commits(runner, resolve_repo, emails_index)
 
             # Clean up the resolve repo
@@ -341,8 +338,8 @@ async def _run_lookup(target, PARENT):
         )
 
         if emails:
-            # metamon.start creates the repo and returns the name
-            temp_repo_name, emails_index = await metamon.start(runner, emails)
+            with silenced_stdout():
+                temp_repo_name, emails_index = await metamon.start(runner, emails)
 
             if emails_index:
                 emails_accounts = await _scrape_commits(

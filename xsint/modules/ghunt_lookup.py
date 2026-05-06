@@ -8,11 +8,10 @@ import builtins
 import getpass
 import base64
 from pathlib import Path
-import io
-from contextlib import redirect_stdout
 from types import SimpleNamespace
 
 from xsint.config import get_config
+from xsint._silence import silenced_stdout
 
 # GHunt requires Python 3.10+ and must be installed separately via pipx
 try:
@@ -84,9 +83,8 @@ async def _load_creds_non_interactive(client):
 
     builtins.input = _blocked_prompt
     getpass.getpass = _blocked_prompt
-    sink = io.StringIO()
     try:
-        with redirect_stdout(sink):
+        with silenced_stdout():
             try:
                 return await auth.load_and_auth(client, interactive=False)
             except TypeError:
@@ -136,9 +134,7 @@ async def run(session, target):
             "source": PARENT,
         }]
 
-    sink = io.StringIO()
-    with redirect_stdout(sink):
-        return await _run_lookup(target, PARENT)
+    return await _run_lookup(target, PARENT)
 
 
 async def _run_lookup(target, PARENT):

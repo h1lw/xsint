@@ -6,6 +6,7 @@
 | ---------------- | -------- | --------------------------------------------------------- | -------------------------------------------------- | ------------------- |
 | `instagram`      | custom   | username                                                  | recovery methods                                   | none                |
 | `phone_basic`    | custom   | phone                                                     | formats, country, carrier, line type, timezone    | none                |
+| `email_enum`     | custom   | email                                                     | registered accounts (Mixcloud, Spotify, Apple TV, Pinterest) | none      |
 | `ip_basic`       | external | ip                                                        | version, private/public                            | none                |
 | `osm`            | external | address                                                   | address, coordinates, location type                | none                |
 | `hibp`           | external | email, username, phone, hash                              | breaches, breach names, breach dates               | api key             |
