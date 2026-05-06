@@ -7,8 +7,6 @@ in parallel and reports one finding per registered hit.
 Each check returns (hit: bool|None, url: str|None, extra: str|None).
 """
 import asyncio
-import html
-import urllib.parse
 
 import httpx
 import phonenumbers
@@ -55,127 +53,12 @@ def _parse(target):
         return None, None
 
 
-# --- Amazon (login probe) ---------------------------------------------------
-
-# E.164 country code -> (regional Amazon domain, openid.assoc_handle)
-_AMAZON_REGIONS = {
-    "1":   ("amazon.com",     "usflex"),
-    "44":  ("amazon.co.uk",   "gbflex"),
-    "49":  ("amazon.de",      "deflex"),
-    "33":  ("amazon.fr",      "frflex"),
-    "39":  ("amazon.it",      "itflex"),
-    "34":  ("amazon.es",      "esflex"),
-    "91":  ("amazon.in",      "inflex"),
-    "81":  ("amazon.co.jp",   "jpflex"),
-    "86":  ("amazon.cn",      "cnflex"),
-    "52":  ("amazon.com.mx",  "mxflex"),
-    "55":  ("amazon.com.br",  "brflex"),
-    "61":  ("amazon.com.au",  "auflex"),
-    "31":  ("amazon.nl",      "nlflex"),
-    "46":  ("amazon.se",      "seflex"),
-    "48":  ("amazon.pl",      "plflex"),
-    "90":  ("amazon.com.tr",  "trflex"),
-    "971": ("amazon.ae",      "aeflex"),
-    "966": ("amazon.sa",      "saflex"),
-    "20":  ("amazon.eg",      "egflex"),
-    "32":  ("amazon.com.be",  "beflex"),
-    "65":  ("amazon.sg",      "sgflex"),
-}
-
-
-async def _chk_amazon(cc, num):
-    """Probe Amazon's regional unified-claim flow with a phone number.
-
-    Modern Amazon signin routes phone-number identifiers through
-    /ax/claim with claimType=phoneNumber + countryCode=<ISO>. The response
-    redirects to /ax/aaut/verify/... (or /ap/signin/...) when the account
-    exists, and stays on the claim page (often with an inline error) when
-    it does not. Falls back to detecting a password input element.
-    """
-    import re as _re
-    domain, assoc = _AMAZON_REGIONS.get(cc, ("amazon.com", "usflex"))
-    iso = SNAP_CC_TO_ISO.get(cc)
-    if not iso:
-        return (None, None, None)
-    show_url = f"https://{domain}"
-    base = f"https://www.{domain}"
-    return_to = urllib.parse.quote(f"{base}/", safe="")
-    signin_url = (
-        f"{base}/ap/signin?openid.pape.max_auth_age=0"
-        f"&openid.return_to={return_to}"
-        f"&openid.identity=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0%2Fidentifier_select"
-        f"&openid.assoc_handle={assoc}&openid.mode=checkid_setup"
-        f"&openid.claimed_id=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0%2Fidentifier_select"
-        f"&openid.ns=http%3A%2F%2Fspecs.openid.net%2Fauth%2F2.0"
-    )
-    headers = {
-        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36",
-        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        "Accept-Language": "en-US,en;q=0.9",
-    }
-    try:
-        async with httpx.AsyncClient(timeout=PER_CHECK_TIMEOUT, follow_redirects=True) as client:
-            r = await client.get(signin_url, headers=headers)
-            html = r.text
-            landed_url = str(r.url)
-
-            # Pull every hidden input the form provides — picks up metadata1,
-            # anti-csrftoken-a2z, appAction, claimCollectionWorkflow, etc.
-            data = {}
-            for tag in _re.findall(r'<input[^>]+>', html):
-                m_name = _re.search(r'name="([^"]+)"', tag)
-                m_val = _re.search(r'value="([^"]*)"', tag)
-                if m_name:
-                    data[m_name.group(1)] = m_val.group(1) if m_val else ""
-
-            # Form action — usually a relative path on the same host.
-            # html.unescape collapses &amp; etc. so we don't end up POSTing
-            # to a literal-ampersand URL that Amazon 404s.
-            import html as _htmllib
-            m_action = _re.search(r'<form[^>]+action="([^"]+)"', html)
-            action = _htmllib.unescape(m_action.group(1)) if m_action else "/ap/signin/"
-            if action.startswith("/"):
-                action = base + action
-            elif not action.startswith("http"):
-                action = landed_url
-
-            # Override the phone-claim fields. Form ships these as empty
-            # placeholder hidden inputs that JS populates client-side, so we
-            # have to assign rather than setdefault.
-            data["email"] = f"+{cc}{num}"
-            data["password"] = data.get("password", "")
-            data["claimType"] = "phoneNumber"
-            data["countryCode"] = iso
-            data["isServerSideRouting"] = "true"
-            data.setdefault("claimCollectionWorkflow", "unified")
-
-            post_headers = dict(headers)
-            post_headers["Content-Type"] = "application/x-www-form-urlencoded"
-            post_headers["Origin"] = base
-            post_headers["Referer"] = landed_url
-
-            r2 = await client.post(action, data=data, headers=post_headers, follow_redirects=False)
-
-            # 302 to a password / verify URL = recognized account.
-            if r2.status_code in (301, 302, 303, 307, 308):
-                loc = r2.headers.get("location", "") or ""
-                if any(p in loc for p in ("/ax/aaut/verify", "/ap/signin", "/ap/mfa", "/ap/cvf")):
-                    return (True, show_url, None)
-                # Some regions redirect back to the claim page on miss.
-                if "/ax/claim" in loc:
-                    return (False, show_url, None)
-                return (None, show_url, None)
-
-            text = r2.text
-            if (
-                'id="auth-password-missing-alert"' in text
-                or 'id="ap_password"' in text
-                or ('name="password"' in text and 'type="password"' in text)
-            ):
-                return (True, show_url, None)
-            return (False, show_url, None)
-    except Exception:
-        return (None, None, None)
+# --- Amazon ---
+# Phone-number lookup goes through Amazon's /ax/claim unified flow which
+# requires a JS-generated metadata1 fingerprint and an anti-csrftoken-a2z
+# token Amazon's frontend computes from cookies. Both are out of reach
+# headlessly — every POST hits the WAF with HTTP 403 + "Page Not Found".
+# Removed for now; would require browser automation to bypass.
 
 
 # --- Snapchat (signup phone validation) -------------------------------------
@@ -220,7 +103,6 @@ async def _chk_snapchat(cc, num):
 
 
 SERVICES = [
-    ("shopping", "Amazon", _chk_amazon),
     ("social", "Snapchat", _chk_snapchat),
 ]
 
