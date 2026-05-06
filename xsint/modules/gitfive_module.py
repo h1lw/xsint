@@ -153,19 +153,11 @@ async def run(session, target):
     PARENT = "GitFive"
 
     if not GITFIVE_AVAILABLE:
-        return 1, [{
-            "label": "Not Installed",
-            "value": "GitFive requires Python 3.10+ and must be installed via pipx: pipx install gitfive --python python3.10",
-            "source": PARENT,
-        }]
+        return 0, []
 
     ready, hint = is_ready()
     if not ready:
-        return 0, [{
-            "label": "Status",
-            "value": f"Not configured ({hint})",
-            "source": PARENT,
-        }]
+        return 0, []
 
     return await _run_lookup(target, PARENT)
 
@@ -215,14 +207,7 @@ async def _run_lookup(target, PARENT):
         try:
             await _login_non_interactive(runner)
         except Exception:
-            return 0, [
-                {
-                    "label": "Status",
-                    "value": "Not logged in (run: xsint --auth gitfive)",
-                    "source": PARENT,
-                    "risk": "low",
-                }
-            ]
+            return 0, []
 
         # 2. Resolve target — email needs metamon lookup, username goes direct
         username = target

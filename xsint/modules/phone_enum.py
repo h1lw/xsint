@@ -153,12 +153,18 @@ async def run(session, target):
 
     findings = []
     for cat, name, (hit, url, extra) in results:
-        if hit is not True:
-            continue
-        findings.append({
-            "label": name,
-            "value": _value(hit, url, extra),
-            "source": PARENT,
-            "group": cat.title(),
-        })
+        if hit is True:
+            findings.append({
+                "label": name,
+                "value": _value(hit, url, extra),
+                "source": PARENT,
+                "group": cat.title(),
+            })
+        elif hit is None and extra:
+            findings.append({
+                "label": name,
+                "value": str(extra),
+                "source": PARENT,
+                "group": cat.title(),
+            })
     return 0, findings

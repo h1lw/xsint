@@ -2840,19 +2840,21 @@ async def _chk_shopping_amazon(email: str):
             if resp.status_code not in (200, 302):
                 return (None, None, None)
 
-            if _is_captcha(resp.text):
-                return (None, None, None)
-
-            # 3. Detect outcome from the rendered page.
-            # Registered: the response asks for a password.
-            # Not registered: Amazon's unified-claim flow lands on
-            # /ax/claim/intent ("Looks like you're new to Amazon") with a
-            # form posting to /ap/register.
+            # 3. Detect outcome from the rendered page. We check positive
+            # signals BEFORE the captcha gate — Amazon's verify-challenge
+            # page legitimately contains the substring "captcha" in JS
+            # element IDs (e.g. aa-challenge-page-captcha-container) without
+            # actually being a CAPTCHA wall.
             text = resp.text
             final_url = str(resp.url)
 
             registered_signals = (
-                'id="auth-password-missing-alert"' in text
+                # URL-based: Amazon redirected to a verify / MFA / password page
+                "/ax/aaut/verify" in final_url
+                or "/ap/mfa" in final_url
+                or "/ap/cvf" in final_url
+                # HTML-based: response contains a password input
+                or 'id="auth-password-missing-alert"' in text
                 or 'id="ap_password"' in text
                 or ('name="password"' in text and 'type="password"' in text)
             )
@@ -2867,7 +2869,10 @@ async def _chk_shopping_amazon(email: str):
                 return (True, show_url, None)
             if not_registered_signals:
                 return (False, show_url, None)
-            # Ambiguous response — don't guess.
+            # No clear signal — surface the captcha/rate-limit case so the
+            # user knows the check was blocked rather than silently dropped.
+            if _is_captcha(text):
+                return (None, show_url, "rate limited (captcha)")
             return (None, None, None)
 
     except httpx.TimeoutException:
@@ -3642,12 +3647,19 @@ async def run(session, target):
 
     findings = []
     for cat, name, (hit, url, extra) in results:
-        if hit is not True:
-            continue
-        findings.append({
-            "label": name,
-            "value": _value(hit, url, extra),
-            "source": PARENT,
-            "group": cat.title(),
-        })
+        if hit is True:
+            findings.append({
+                "label": name,
+                "value": _value(hit, url, extra),
+                "source": PARENT,
+                "group": cat.title(),
+            })
+        elif hit is None and extra:
+            # Surface rate-limit / captcha blocks as a separate finding.
+            findings.append({
+                "label": name,
+                "value": str(extra),
+                "source": PARENT,
+                "group": cat.title(),
+            })
     return 0, findings
