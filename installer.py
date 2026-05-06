@@ -13,62 +13,27 @@ from pathlib import Path
 
 MIN_MINOR = 10
 MAX_MINOR = 13
-RICH_CONSOLE = None
-RICH_ERR_CONSOLE = None
-RICH_PANEL = None
 
 
 def info(message: str) -> None:
-    if not message:
-        print("")
-        return
-    if RICH_CONSOLE is not None:
-        RICH_CONSOLE.print(message)
-    else:
-        print(message)
+    print(message)
 
 
 def section(message: str) -> None:
-    if RICH_CONSOLE is not None:
-        RICH_CONSOLE.print(f"[bold cyan]{message}[/bold cyan]")
-    else:
-        print(message)
+    print(message)
 
 
 def success(message: str) -> None:
-    if RICH_CONSOLE is not None:
-        RICH_CONSOLE.print(f"[bold green]{message}[/bold green]")
-    else:
-        print(message)
+    print(message)
 
 
 def warn(message: str) -> None:
-    if RICH_CONSOLE is not None:
-        RICH_CONSOLE.print(f"[yellow]{message}[/yellow]")
-    else:
-        print(message)
+    print(message)
 
 
 def fail(message: str) -> None:
-    if RICH_ERR_CONSOLE is not None:
-        RICH_ERR_CONSOLE.print(f"[bold red]{message}[/bold red]")
-    else:
-        print(message, file=sys.stderr)
+    print(message, file=sys.stderr)
     raise SystemExit(1)
-
-
-def setup_rich(force: bool = False) -> None:
-    global RICH_CONSOLE, RICH_ERR_CONSOLE, RICH_PANEL
-    if RICH_CONSOLE is not None and not force:
-        return
-    try:
-        from rich.console import Console
-        from rich.panel import Panel
-    except Exception:
-        return
-    RICH_CONSOLE = Console()
-    RICH_ERR_CONSOLE = Console(stderr=True)
-    RICH_PANEL = Panel
 
 
 def command_exists(name: str) -> bool:
@@ -168,10 +133,7 @@ def pip_install(python: str, args: list[str]) -> None:
     if out:
         info(out)
     if err:
-        if RICH_ERR_CONSOLE is not None:
-            RICH_ERR_CONSOLE.print(err)
-        else:
-            print(err, file=sys.stderr)
+        print(err, file=sys.stderr)
     raise SystemExit(code)
 
 
@@ -274,7 +236,6 @@ def parse_args() -> argparse.Namespace:
 
 
 def main() -> None:
-    setup_rich()
     args = parse_args()
     python = find_python()
 
@@ -298,7 +259,6 @@ def main() -> None:
 
     section("Installing xsint and dependencies...")
     pip_install(python, ["-e", str(install_dir), "--quiet"])
-    setup_rich(force=True)
     info("")
 
     section("Installing ghunt + gitfive...")
@@ -337,20 +297,13 @@ def main() -> None:
     maybe_configure_auth(python, install_dir, args.no_auth_prompt)
 
     info("")
-    if RICH_CONSOLE is not None and RICH_PANEL is not None:
-        run_cmd = "xsint <target>" if path_has_dir(bin_dir) else f"{bin_dir / 'xsint'} <target>"
-        panel_text = (
-            f"[bold]Install dir:[/bold] {install_dir}\n"
-            f"[bold]Bin dir:[/bold] {bin_dir}\n"
-            f"[bold]Run:[/bold] {run_cmd}"
-        )
-        RICH_CONSOLE.print(RICH_PANEL.fit(panel_text, title="Setup complete", border_style="green"))
+    success("Setup complete.")
+    info(f"  install dir : {install_dir}")
+    info(f"  bin dir     : {bin_dir}")
+    if path_has_dir(bin_dir):
+        info("  run         : xsint <target>")
     else:
-        success("Setup complete!")
-        if path_has_dir(bin_dir):
-            info("  Run: xsint <target>")
-        else:
-            info(f"  Run: {bin_dir / 'xsint'} <target>")
+        info(f"  run         : {bin_dir / 'xsint'} <target>")
 
 
 if __name__ == "__main__":

@@ -23,6 +23,10 @@ class ConfigManager:
             json.dump(self.data, f, indent=2)
 
     def get(self, key: str, default=None):
+        if key == "proxy":
+            env_proxy = os.environ.get("XSINT_PROXY", "").strip()
+            if env_proxy:
+                return env_proxy
         return self.data.get(key, default)
 
     def set(self, key: str, value):

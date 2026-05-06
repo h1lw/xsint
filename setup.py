@@ -8,8 +8,6 @@ setup(
     install_requires=[
         "aiohttp",
         "aiohttp-socks",
-        "rich",
-        "rich-argparse",
         "phonenumbers",
         "geopy",
         "hashid",

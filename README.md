@@ -33,23 +33,18 @@ The installer:
 ## Command usage
 
 ```text
-usage: xsint [-h] [--modules [TYPE]] [--auth [ARGS ...]]
-             [--proxy URL] [--set-proxy URL]
-             [target]
+usage: xsint [-h] [-m [TYPE]] [--auth [ARGS ...]] [--proxy URL] [target]
 
 positional arguments:
-  target                Target to scan
+  target              target to scan
 
-optional arguments:
-  -h, --help            show this help message and exit
-  --modules [TYPE], -m [TYPE]
-                        List modules for an input type (e.g. --modules email)
-  --auth [ARGS ...]
-                        Configure credentials for a module (e.g. --auth hibp
-                        KEY, --auth ghunt, --auth haxalot). Run --auth to
-                        show auth status.
-  --proxy URL           Proxy URL (e.g. socks5://127.0.0.1:9050)
-  --set-proxy URL       Save a default proxy URL
+options:
+  -h, --help          show this help message and exit
+  -m, --modules [TYPE]
+                      list modules (optionally filter by input type)
+  --auth [ARGS ...]   configure credentials (no args = show status)
+  --proxy URL         proxy URL for this run (e.g. socks5://127.0.0.1:9050).
+                      Set XSINT_PROXY to persist.
 ```
 
 ## Common examples

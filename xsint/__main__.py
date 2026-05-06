@@ -1,518 +1,302 @@
+import argparse
+import asyncio
+import getpass
+import importlib
 import os
 import shutil
 import subprocess
 import sys
-import importlib
+from urllib.parse import urlparse
 
-
-# --- Normal imports (require installed deps) ---
-import argparse
-import asyncio
-import getpass
-from rich.console import Console
-from rich.panel import Panel
-from rich.progress import (
-    BarColumn,
-    Progress,
-    SpinnerColumn,
-    TaskProgressColumn,
-    TextColumn,
-    TimeElapsedColumn,
-)
-from rich.table import Table
-from .core import XsintEngine
 from .config import get_config
-from .ui import print_banner, print_results
-
-console = Console()
-
-try:
-    from rich_argparse import RichHelpFormatter
-except Exception:
-    RichHelpFormatter = argparse.HelpFormatter
+from .core import XsintEngine
+from .ui import print_results
 
 
 API_KEY_SERVICES = {"hibp", "intelx", "9ghz"}
 LOGIN_SERVICES = {"ghunt", "gitfive"}
 SETUP_SERVICES = {"haxalot"}
+ALL_AUTH_SERVICES = API_KEY_SERVICES | LOGIN_SERVICES | SETUP_SERVICES
+CUSTOM_MODULES = {"instagram", "phone_basic"}
 
 
-def _normalize_service_name(service):
+def _normalize_service(service):
     s = service.strip().lower()
-    if s in {"nineghz", "9ghz"}:
-        return "9ghz"
-    return s
+    return "9ghz" if s in {"nineghz", "9ghz"} else s
+
+
+def _validate_proxy(url):
+    parsed = urlparse(url)
+    if not parsed.scheme or not parsed.netloc:
+        raise ValueError(f"invalid proxy URL: {url}")
+    if ":" in parsed.netloc:
+        _, port = parsed.netloc.rsplit(":", 1)
+        try:
+            p = int(port)
+        except ValueError:
+            raise ValueError(f"invalid proxy port: {port}")
+        if not 1 <= p <= 65535:
+            raise ValueError(f"proxy port out of range: {p}")
 
 
 def _run_external_login(service):
-    service = _normalize_service_name(service)
-    which_path = shutil.which(service)
+    service = _normalize_service(service)
     candidates = []
+
+    if service == "gitfive":
+        candidates.append([
+            sys.executable, "-c",
+            "from gitfive.lib.cli import parse_args; parse_args()", "login",
+        ])
+    else:
+        candidates.append([sys.executable, "-m", service, "login"])
+
+    local_bin = os.path.join(os.path.dirname(sys.executable), service)
+    candidates.append([local_bin, "login"])
+
+    which_path = shutil.which(service)
     if which_path:
         candidates.append([which_path, "login"])
 
-    # Fallback to a direct pipx venv binary if present.
     candidates.append([os.path.expanduser(f"~/.local/pipx/venvs/{service}/bin/{service}"), "login"])
 
-    # Fall back to module CLI in current runtime.
-    candidates.append([sys.executable, "-m", service, "login"])
-
+    attempted = False
     for cmd in candidates:
         exe = cmd[0]
         if os.path.sep in exe and not (os.path.isfile(exe) and os.access(exe, os.X_OK)):
             continue
         try:
-            result = subprocess.run(cmd)
-            if result.returncode == 0:
-                return True
+            attempted = True
+            if subprocess.run(cmd).returncode == 0:
+                return True, True
+            return False, True
         except Exception:
             continue
-    return False
+    return False, attempted
 
 
 def _print_auth_status():
-    """Show auth status for key, login, and setup-gated modules."""
     config = get_config()
-    table = Table(
-        show_header=True,
-        header_style="bold cyan",
-        box=None,
-        show_edge=False,
-        pad_edge=False,
-    )
-    table.add_column("module")
-    table.add_column("auth")
-    table.add_column("status")
-    table.add_column("source")
-    table.add_column("hint")
+    api_auth_types = {"9ghz": "api_key(optional)", "hibp": "api_key", "intelx": "api_key"}
 
-    api_auth_types = {
-        "9ghz": "api_key(optional)",
-        "hibp": "api_key",
-        "intelx": "api_key",
-    }
-
-    for service in sorted(api_auth_types.keys()):
+    rows = []
+    for service in sorted(api_auth_types):
         env_key = os.environ.get(f"XSINT_{service.upper()}_API_KEY", "").strip()
         cfg_key = (config.get(f"{service}_key", "") or "").strip()
         if env_key:
-            status = "[green]set[/green]"
-            source = "env"
-            hint = "-"
+            rows.append((service, api_auth_types[service], "set", "env", "-"))
         elif cfg_key:
-            status = "[green]set[/green]"
-            source = "config"
-            hint = "-"
+            rows.append((service, api_auth_types[service], "set", "config", "-"))
         else:
-            status = "[red]missing[/red]"
-            source = "-"
-            hint = f"xsint --auth {service} <value>"
-        table.add_row(service, api_auth_types[service], status, source, hint)
+            rows.append((service, api_auth_types[service], "missing", "-", f"xsint --auth {service} <value>"))
 
-    ready_checks = [
+    runtime = [
         ("ghunt", "login", "ghunt_lookup", "xsint --auth ghunt"),
         ("gitfive", "login", "gitfive_module", "xsint --auth gitfive"),
         ("haxalot", "setup(optional)", "haxalot_module", "xsint --auth haxalot"),
     ]
-    for service, auth_type, module_name, setup_hint in ready_checks:
-        status = "[red]missing[/red]"
-        source = "-"
-        hint = setup_hint
-
+    for service, auth_type, module_name, hint in runtime:
+        status, source, h = "missing", "-", hint
         try:
-            imported = importlib.import_module(f"xsint.modules.{module_name}")
-            checker = getattr(imported, "is_ready", None)
+            mod = importlib.import_module(f"xsint.modules.{module_name}")
+            checker = getattr(mod, "is_ready", None)
             if callable(checker):
                 result = checker()
                 if isinstance(result, tuple):
-                    ready = bool(result[0]) if len(result) > 0 else False
+                    ready = bool(result[0])
                     reason = str(result[1]) if len(result) > 1 and result[1] else ""
                 else:
-                    ready = bool(result)
-                    reason = ""
+                    ready, reason = bool(result), ""
                 if ready:
-                    status = "[green]set[/green]"
-                    source = "session"
-                    hint = "-"
+                    status, source, h = "set", "session", "-"
                 elif reason == "not installed":
-                    status = "[yellow]not installed[/yellow]"
-                    source = "-"
-                    hint = "install dependency"
-                elif reason and reason != setup_hint:
-                    hint = reason
+                    status, source, h = "not installed", "-", "install dependency"
+                elif reason and reason != hint:
+                    h = reason
             else:
-                status = "[green]set[/green]"
-                source = "-"
-                hint = "-"
+                status, source, h = "set", "-", "-"
         except Exception:
-            status = "[yellow]not installed[/yellow]"
-            source = "-"
-            hint = "install dependency"
+            status, source, h = "not installed", "-", "install dependency"
+        rows.append((service, auth_type, status, source, h))
 
-        table.add_row(service, auth_type, status, source, hint)
+    headers = ("module", "auth", "status", "source", "hint")
+    _print_table(headers, rows)
 
-    console.print(table)
+
+def _print_table(headers, rows):
+    cols = list(zip(headers, *rows)) if rows else [(h,) for h in headers]
+    widths = [max(len(str(c)) for c in col) for col in cols]
+    fmt = "  ".join(f"{{:<{w}}}" for w in widths)
+    print(fmt.format(*headers))
+    for row in rows:
+        print(fmt.format(*row))
+
+
+def _build_modules_table(caps, type_filter="all"):
+    selected = sorted(caps) if type_filter == "all" else [type_filter]
+    by_module = {}
+    for type_name in selected:
+        for mod in caps.get(type_name, []):
+            entry = by_module.setdefault(mod["name"], {"statuses": set(), "types": []})
+            entry["statuses"].add(mod["status"])
+            if type_name.upper() not in entry["types"]:
+                entry["types"].append(type_name.upper())
+
+    def source_for(name):
+        return "custom" if name in CUSTOM_MODULES else "external"
+
+    rows = []
+    for name in sorted(by_module, key=lambda n: (0 if source_for(n) == "custom" else 1, n)):
+        entry = by_module[name]
+        status = "active" if "active" in entry["statuses"] else "locked"
+        rows.append((name, source_for(name), status, "|".join(entry["types"]) or "-"))
+    return rows
+
+
+HELP_TEXT = """\
+xsint - OSINT Switchblade ( https://github.com/memorypudding/xsint )
+Usage: xsint [Options] {target}
+
+TARGET SPECIFICATION:
+  Auto-detected types: email, username, phone, ip, address, hash, name, id, ssn, passport
+  Use a prefix to disambiguate: user:admin, addr:"Tokyo, Japan", hash:5f4dcc3b
+  Ex: xsint user@example.com; xsint ip:8.8.8.8; xsint phone:+14155551234
+
+MODULE LISTING:
+  -m, --modules [TYPE]: List modules; optionally filter by input type (e.g. -m email)
+
+AUTHENTICATION:
+  --auth: Show credential status for all auth-gated modules
+  --auth <service> <key>: Save API key (hibp, intelx, 9ghz)
+  --auth <service>: Run interactive setup (ghunt, gitfive, haxalot)
+
+NETWORK:
+  --proxy <URL>: Proxy URL for this run (http://, socks5://, ...)
+                 Set XSINT_PROXY in the environment to persist.
+
+MISC:
+  -h, --help: Print this help summary
+"""
+
+
+class _XsintParser(argparse.ArgumentParser):
+    def format_help(self):
+        return HELP_TEXT
+
+    def format_usage(self):
+        return "Usage: xsint [Options] {target}\n"
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        prog="xsint",
-        description="XSINT - OSINT Switchblade",
-        formatter_class=RichHelpFormatter,
-    )
-    parser.add_argument("target", nargs="?", help="Target to scan")
-    parser.add_argument(
-        "--modules",
-        "-m",
-        nargs="?",
-        const="all",
-        metavar="TYPE",
-        help="List modules for an input type (e.g. --modules email)",
-    )
-
-    parser.add_argument(
-        "--auth",
-        nargs="*",
-        metavar="ARGS",
-        help="Configure module credentials (e.g. --auth hibp KEY, --auth ghunt, --auth haxalot). Run --auth to show auth status.",
-    )
-    parser.add_argument(
-        "--proxy", metavar="URL", help="Proxy URL (e.g. socks5://127.0.0.1:9050)"
-    )
-    parser.add_argument("--set-proxy", metavar="URL", help="Save a default proxy URL")
+    parser = _XsintParser(prog="xsint", add_help=True)
+    parser.add_argument("target", nargs="?")
+    parser.add_argument("-m", "--modules", nargs="?", const="all", metavar="TYPE")
+    parser.add_argument("--auth", nargs="*", metavar="ARGS")
+    parser.add_argument("--proxy", metavar="URL")
 
     args = parser.parse_args()
 
-    # Validate proxy URL if provided
-    if hasattr(args, "proxy") and args.proxy:
-        from urllib.parse import urlparse
-
+    if args.proxy:
         try:
-            parsed = urlparse(args.proxy)
-            if not parsed.scheme or not parsed.netloc:
-                raise ValueError(f"Invalid proxy URL format: {args.proxy}")
-            if ":" in parsed.netloc:
-                host_port = parsed.netloc.rsplit(":", 1)
-                if len(host_port) == 2:
-                    try:
-                        port = int(host_port[1])
-                        if not (1 <= port <= 65535):
-                            raise ValueError(f"Proxy port out of range: {port}")
-                    except ValueError:
-                        raise ValueError(f"Invalid proxy port: {host_port[1]}")
+            _validate_proxy(args.proxy)
         except ValueError as e:
-            console.print(f"[bold red][!] Proxy error: {e}[/bold red]")
-            console.print("[yellow]Example formats:[/yellow]")
-            console.print("  --proxy http://127.0.0.1:8080")
-            console.print("  --proxy socks5://127.0.0.1:9050")
+            print(f"[!] {e}", file=sys.stderr)
             sys.exit(1)
 
-    # --- HANDLER: --auth ---
     if args.auth is not None:
-        if len(args.auth) == 0:
-            _print_auth_status()
-            return
-
-        service = _normalize_service_name(args.auth[0])
-
-        if service in {"status", "list", "ls"}:
-            _print_auth_status()
-            return
-
-        if service in API_KEY_SERVICES:
-            config = get_config()
-            if len(args.auth) >= 2:
-                key = " ".join(args.auth[1:]).strip()
-            else:
-                key = getpass.getpass("Credential value: ").strip()
-
-            if not key:
-                console.print("[bold red]No credential value provided.[/bold red]")
-                return
-
-            config.set(f"{service}_key", key)
-            console.print(f"[bold green]Saved credential:[/bold green] {service}")
-            return
-
-        if service in LOGIN_SERVICES:
-            ok = _run_external_login(service)
-            if not ok:
-                console.print(
-                    f"[bold red]Failed to run {service} login.[/bold red]\n"
-                    f"[dim]Install {service} and run '{service} login' manually.[/dim]"
-                )
-            return
-
-        if service in SETUP_SERVICES:
-            try:
-                from .modules import haxalot_module
-                asyncio.run(haxalot_module.setup())
-            except ModuleNotFoundError as e:
-                missing = getattr(e, "name", "dependency")
-                console.print(
-                    f"\n[bold red]Haxalot setup unavailable: missing '{missing}'.[/bold red]"
-                )
-                console.print(
-                    "[dim]Reinstall or update dependencies, then retry: "
-                    "pip install -r requirements.txt[/dim]"
-                )
-            except KeyboardInterrupt:
-                console.print("\n[bold yellow]Setup aborted.[/bold yellow]")
-            except Exception as e:
-                console.print(f"\n[bold red]Setup failed: {e}[/bold red]")
-            return
-
-        supported = ", ".join(
-            sorted(API_KEY_SERVICES | LOGIN_SERVICES | SETUP_SERVICES)
-        )
-        console.print(
-            Panel(
-                f"[bold red]Unknown module:[/bold red] {service}\n"
-                f"[dim]Supported: {supported}[/dim]",
-                title="Invalid --auth usage",
-                border_style="red",
-            )
-        )
-        return
-
-    if args.set_proxy is not None:
-        config = get_config()
-        if args.set_proxy.lower() in ("", "off", "none", "clear"):
-            config.set("proxy", None)
-            console.print("[bold green]Proxy cleared[/bold green]")
-        else:
-            config.set("proxy", args.set_proxy)
-            console.print(f"[bold green]Proxy saved:[/bold green] {args.set_proxy}")
-        return
+        return _handle_auth(args.auth)
 
     try:
         asyncio.run(async_main(args))
     except KeyboardInterrupt:
-        console.print("\n[bold red][!] Scan interrupted by user.[/bold red]")
+        print("\n[!] interrupted", file=sys.stderr)
         sys.exit(1)
 
 
-def _build_modules_plain_table(caps, type_filter="all"):
-    """
-    Build a module-centric borderless table.
-    Columns: module, status, types.
-    """
-    def _ordered_add(target, values):
-        for v in values:
-            if v not in target:
-                target.append(v)
+def _handle_auth(auth_args):
+    if not auth_args:
+        _print_auth_status()
+        return
 
-    table = Table(
-        show_header=True,
-        header_style="bold cyan",
-        box=None,
-        show_edge=False,
-        pad_edge=False,
-    )
-    table.add_column("module")
-    table.add_column("status")
-    table.add_column("types")
+    service = _normalize_service(auth_args[0])
 
-    if type_filter == "all":
-        selected_types = sorted(caps.keys())
-    else:
-        selected_types = [type_filter]
+    if service in API_KEY_SERVICES:
+        config = get_config()
+        if len(auth_args) >= 2:
+            key = " ".join(auth_args[1:]).strip()
+        else:
+            key = getpass.getpass("Credential value: ").strip()
+        if not key:
+            print("[!] no credential provided", file=sys.stderr)
+            return
+        config.set(f"{service}_key", key)
+        print(f"saved: {service}")
+        return
 
-    by_module = {}
-    for type_name in selected_types:
-        for mod in caps.get(type_name, []):
-            name = mod["name"]
-            if name not in by_module:
-                by_module[name] = {
-                    "statuses": [],
-                    "types": [],
-                }
-            row = by_module[name]
-            _ordered_add(row["statuses"], [mod["status"]])
-            _ordered_add(row["types"], [type_name.upper()])
+    if service in LOGIN_SERVICES:
+        ok, attempted = _run_external_login(service)
+        if not ok:
+            if attempted:
+                print(f"[!] {service} login did not complete. retry: xsint --auth {service}", file=sys.stderr)
+            else:
+                print(f"[!] {service} not found. install {service} and run '{service} login'", file=sys.stderr)
+        return
 
-    for module_name in sorted(by_module.keys()):
-        row = by_module[module_name]
-        effective_status = "active" if "active" in row["statuses"] else "locked"
-        status_text = (
-            "[green]active[/green]"
-            if effective_status == "active"
-            else "[red]locked[/red]"
-        )
-        table.add_row(
-            module_name,
-            status_text,
-            "|".join(row["types"]) if row["types"] else "-",
-        )
+    if service in SETUP_SERVICES:
+        try:
+            from .modules import haxalot_module
+            asyncio.run(haxalot_module.setup())
+        except ModuleNotFoundError as e:
+            print(f"[!] haxalot setup unavailable: missing '{getattr(e, 'name', 'dependency')}'", file=sys.stderr)
+        except KeyboardInterrupt:
+            print("\n[!] aborted", file=sys.stderr)
+        except Exception as e:
+            print(f"[!] setup failed: {e}", file=sys.stderr)
+        return
 
-    return table
+    print(f"[!] unknown module: {service}", file=sys.stderr)
+    print(f"    supported: {', '.join(sorted(ALL_AUTH_SERVICES))}", file=sys.stderr)
 
 
 async def async_main(args):
-    # If a proxy is passed via CLI, inject it into the global config memory
-    # so that independent modules (like GHunt/httpx) can find it.
     if args.proxy:
         get_config().data["proxy"] = args.proxy
 
-    engine = XsintEngine(proxy=getattr(args, "proxy", None))
+    engine = XsintEngine(proxy=args.proxy)
 
-    # Handle --modules [TYPE]
     if args.modules:
         caps = engine.get_capabilities()
         type_filter = args.modules.lower()
-
-        if type_filter == "all":
-            console.print(_build_modules_plain_table(caps, "all"))
-        elif type_filter in caps:
-            console.print(_build_modules_plain_table(caps, type_filter))
+        if type_filter == "all" or type_filter in caps:
+            rows = _build_modules_table(caps, type_filter)
+            _print_table(("module", "source", "status", "types"), rows)
         else:
-            valid = ", ".join(sorted(caps.keys()))
-            console.print(
-                f"[yellow]Unknown type '{type_filter}'. Available: {valid}[/yellow]"
-            )
+            print(f"[!] unknown type '{type_filter}'. available: {', '.join(sorted(caps))}", file=sys.stderr)
         await engine.close()
         return
 
-    # Handle Missing Target
     if not args.target:
-        print_banner()
-        console.print(
-            Panel(
-                "[yellow]Missing target[/yellow]\n"
-                "[dim]Example: xsint user:admin[/dim]\n"
-                "[dim]Tip: run xsint --help for full usage.[/dim]",
-                border_style="yellow",
-            )
-        )
+        print("missing target — example: xsint user:admin")
         await engine.close()
         return
 
-    # Handle Scan
-    print_banner()
+    def on_progress(event):
+        kind = event.get("event")
+        if kind == "detect_done":
+            t = event.get("target_type")
+            print(f"[*] target type: {str(t).upper() if t else 'AMBIGUOUS'}")
+        elif kind == "modules_loaded":
+            count = int(event.get("count", 0))
+            skipped = len(event.get("skipped") or [])
+            extra = f" (skipped: {skipped})" if skipped else ""
+            print(f"[*] eligible modules: {count}{extra}")
+        elif kind == "module_done":
+            name = event.get("module", "?")
+            status = event.get("status", "ok")
+            print(f"[+] {name}: {status}")
 
-    progress = Progress(
-        TextColumn("[bold cyan]{task.fields[kind]:<6}[/]"),
-        SpinnerColumn(style="bold green"),
-        TextColumn("{task.description}"),
-        BarColumn(
-            bar_width=22,
-            complete_style="green",
-            finished_style="green",
-            pulse_style="green",
-        ),
-        TaskProgressColumn(),
-        TimeElapsedColumn(),
-        console=console,
-        transient=False,
-    )
-
-    detect_task_id = None
-    load_task_id = None
-    run_task_id = None
-    module_task_ids = {}
-
-    with progress:
-        detect_task_id = progress.add_task("detect target type", total=1, kind="STAGE")
-        load_task_id = progress.add_task("load eligible modules", total=1, kind="STAGE")
-
-        def on_progress(event):
-            nonlocal run_task_id
-            event_type = event.get("event")
-
-            if event_type == "detect_done":
-                target_type = event.get("target_type")
-                if target_type:
-                    progress.update(
-                        detect_task_id,
-                        completed=1,
-                        description=f"target type: {str(target_type).upper()}",
-                    )
-                else:
-                    progress.update(
-                        detect_task_id,
-                        completed=1,
-                        description="target type: AMBIGUOUS",
-                    )
-                    progress.update(
-                        load_task_id, completed=1, description="load modules (skipped)"
-                    )
-                return
-
-            if event_type == "modules_loaded":
-                count = int(event.get("count", 0))
-                names = event.get("modules", [])
-                skipped = event.get("skipped", []) or []
-                skipped_count = len(skipped)
-                if skipped_count:
-                    description = f"eligible modules: {count} (skipped: {skipped_count})"
-                else:
-                    description = f"eligible modules: {count}"
-                progress.update(
-                    load_task_id, completed=1, description=description
-                )
-                run_task_id = progress.add_task(
-                    "execute modules",
-                    total=max(count, 1),
-                    completed=0,
-                    kind="STAGE",
-                )
-                for name in names:
-                    module_task_ids[name] = progress.add_task(
-                        f"{name}: queued", total=None, kind="MODULE"
-                    )
-                if count == 0:
-                    progress.update(
-                        run_task_id, completed=1, description="execute modules (none)"
-                    )
-                return
-
-            if event_type == "module_start":
-                name = str(event.get("module", "module"))
-                if run_task_id is not None:
-                    progress.update(run_task_id, description=f"execute: {name}")
-                task_id = module_task_ids.get(name)
-                if task_id is not None:
-                    progress.update(task_id, description=f"{name}: running")
-                return
-
-            if event_type == "module_done":
-                name = str(event.get("module", "module"))
-                status = str(event.get("status", "ok"))
-                task_id = module_task_ids.get(name)
-                if task_id is not None:
-                    if status == "ok":
-                        progress.update(
-                            task_id,
-                            total=1,
-                            completed=1,
-                            description=f"{name}: done",
-                        )
-                    elif status == "timeout":
-                        progress.update(
-                            task_id,
-                            total=1,
-                            completed=1,
-                            description=f"{name}: timeout",
-                        )
-                    else:
-                        progress.update(
-                            task_id,
-                            total=1,
-                            completed=1,
-                            description=f"{name}: error",
-                        )
-                if run_task_id is not None:
-                    progress.advance(run_task_id, 1)
-                return
-
-            if event_type == "scan_done" and run_task_id is not None:
-                progress.update(run_task_id, description="modules complete")
-
-        report = await engine.scan(args.target, progress_cb=on_progress)
-
-    console.print()
-    console.print("[dim]" + ("-" * 72) + "[/dim]")
-    console.print()
+    report = await engine.scan(args.target, progress_cb=on_progress)
+    print()
     print_results(report)
     await engine.close()
 
