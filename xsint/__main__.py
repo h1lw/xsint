@@ -526,11 +526,15 @@ async def async_main(args):
                     progress_stream.flush()
 
         async def _animator():
+            # Tick at ~12 fps. Faster than strictly needed for the 4 fps
+            # dot animation, but more frequent ticks mean any one-off
+            # event-loop hiccup (cold-cache import, lock contention)
+            # doesn't stretch into a visible stutter.
             while not spinner_stop.is_set():
                 if any(info["status"] == "running" for info in modules_state.values()):
                     _render()
                 try:
-                    await asyncio.wait_for(spinner_stop.wait(), timeout=0.18)
+                    await asyncio.wait_for(spinner_stop.wait(), timeout=0.08)
                 except asyncio.TimeoutError:
                     pass
 

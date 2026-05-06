@@ -954,13 +954,19 @@ def _bin_findings(results, target=None):
     for slot in name_merge.values():
         if slot["value"].lower() in auth_seen:
             continue
-        # Filter junk: skip names that look like usernames (contain digits),
-        # very long tokens, or all-caps multi-word strings (looks like
-        # company/bank names from credit-card breaches).
         v = slot["value"]
-        if re.search(r"\d", v):
-            continue  # has digits → likely a username
         if len(v) > 40:
+            continue
+        # Names that contain digits are almost always handles/usernames
+        # disguised as a Name field (e.g. "f666ck", "Clarissa_03"). Route
+        # them to aliases instead of dropping them outright.
+        if re.search(r"\d", v) or re.search(r"[._-]", v):
+            alias_merge.setdefault(v.lower(), {
+                "value": v, "breaches": []
+            })["breaches"].extend(
+                b for b in slot["breaches"]
+                if b not in alias_merge[v.lower()]["breaches"]
+            )
             continue
         # Cross-corroborated (>= 2 distinct breaches) OR matches target email.
         is_corroborated = len(slot["breaches"]) >= 2
@@ -1051,6 +1057,7 @@ def _haxalot_classify(group, label):
         "🔑 passwords": "passwords",
         "🔐 hashes": "hashes",
         "👤 names": "names",
+        "👥 aliases": "aliases",
         "📍 locations": "locations",
         "📱 phones": "phones",
         "📧 emails": "alt_emails",

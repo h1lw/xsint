@@ -356,7 +356,11 @@ _CATEGORY_RULES = [
         "address", "adres", "city", "region", "country", "stat", "postal",
         "pin code", "zip", "latitude", "longitude",
     ])),
-    ("👤 Names",       lambda s: any(k in s for k in ["full name", "surname", "name", "nick"])),
+    # Aliases come before Names so "Nick" / "Username" / "Handle" don't
+    # get caught by the Names rule's loose "name" substring match.
+    ("👥 Aliases",     lambda s: ("nick" in s or "username" in s
+                                    or "handle" in s or "login" in s)),
+    ("👤 Names",       lambda s: any(k in s for k in ["full name", "surname", "name"])),
     ("📆 Dates",       lambda s: "date" in s or "activity" in s or "registration" in s),
     ("🏢 Companies",   lambda s: "company" in s),
     ("🔗 Links",       lambda s: any(k in s for k in ["link", "website", "url", "app ("])),
@@ -373,6 +377,7 @@ _CATEGORY_ORDER = [
     "🔑 Passwords",
     "🔐 Hashes",
     "👤 Names",
+    "👥 Aliases",
     "📍 Locations",
     "📱 Phones",
     "📧 Emails",
