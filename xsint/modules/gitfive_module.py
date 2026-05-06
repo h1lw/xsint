@@ -161,7 +161,8 @@ async def run(session, target):
             "source": PARENT,
         }]
 
-    return await _run_lookup(target, PARENT)
+    with silenced_stdout():
+        return await _run_lookup(target, PARENT)
 
 
 async def _run_lookup(target, PARENT):

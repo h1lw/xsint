@@ -140,9 +140,18 @@ SERVICES = [
 
 async def _safe(name, url, fn, client, email):
     try:
-        return name, url, await fn(client, email)
-    except Exception:
-        return name, url, None
+        hit = await fn(client, email)
+        return name, url, hit
+    except Exception as e:
+        return name, url, e
+
+
+def _status(hit):
+    if hit is True:
+        return "registered"
+    if hit is False:
+        return "not registered"
+    return "error"
 
 
 async def run(session, target):
@@ -158,7 +167,7 @@ async def run(session, target):
         )
 
     findings = [
-        {"label": name, "value": url, "source": PARENT, "group": "Registered"}
-        for name, url, hit in results if hit is True
+        {"label": name, "value": _status(hit), "source": PARENT}
+        for name, _url, hit in results
     ]
     return 0, findings
