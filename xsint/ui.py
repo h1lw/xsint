@@ -526,12 +526,24 @@ def _print_pretty(report, target):
         print(f"  {BOLD}{heading}{RST}")
         print(f"  {DIM}{'─' * len(heading)}{RST}")
 
+    def _visible(s):
+        """Length of `s` ignoring ANSI escape codes."""
+        return len(re.sub(r"\033\[[0-9;]*m", "", s))
+
+    LABEL_COL = 14  # max label width
+    LABEL_GAP = 2   # min spaces between label and value
+
     def _row(label, value, attr=None, value_color=""):
-        """Emit a single row.  Attr is rendered dim, right-aligned when it
-        fits on the same line; otherwise it falls onto a continuation line."""
-        label_w = 11
+        """Emit one row: label (left), value, dim attribution (right).
+
+        Long values push the attribution to a continuation line.
+        """
         indent = "  "
-        label_str = (label or "").ljust(label_w)
+        label = label or ""
+        pad = max(LABEL_GAP, LABEL_COL - _visible(label) + LABEL_GAP)
+        label_str = label + " " * pad
+        prefix_w = len(indent) + _visible(label) + pad
+
         v = str(value)
         full_value = f"{value_color}{v}{RST}" if value_color else v
 
@@ -539,14 +551,13 @@ def _print_pretty(report, target):
             print(f"{indent}{label_str}{full_value}")
             return
 
-        # Visible-width check (ignores ANSI codes).
-        bare = f"{indent}{label_str}{v}  {attr}"
-        if len(bare) <= width:
-            pad = width - len(f"{indent}{label_str}{v}{attr}")
-            print(f"{indent}{label_str}{full_value}{' ' * pad}{DIM}{attr}{RST}")
+        line_w = prefix_w + len(v) + 2 + len(attr)
+        if line_w <= width:
+            gap = width - prefix_w - len(v) - len(attr)
+            print(f"{indent}{label_str}{full_value}{' ' * gap}{DIM}{attr}{RST}")
         else:
             print(f"{indent}{label_str}{full_value}")
-            print(f"{indent}{' ' * label_w}{DIM}└─ {attr}{RST}")
+            print(f"{indent}{' ' * (prefix_w - len(indent))}{DIM}└─ {attr}{RST}")
 
     def _multirow(label, items):
         """First item gets the label, rest get blank label."""
