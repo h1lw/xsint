@@ -79,6 +79,43 @@ async def setup():
         print(f"[+] Session saved to: {os.path.abspath(SESSION_NAME + '.session')}")
         print("[+] Haxalot is now ready for use.")
 
+# Substrings the bot uses when nothing matches the query. If we see one
+# of these in any reply, bail out fast instead of waiting for a report
+# that's never coming.
+_NO_RESULTS_MARKERS = (
+    "no results found",
+    "no record",
+    "ничего не найдено",
+    "🤷",
+    "all the words in your request are found too often",
+)
+
+# Strings the bot uses for "checking your query" / busy waits — these are
+# transient acks, not a final answer. Keep waiting if all we have is one
+# of these.
+_TRANSIENT_MARKERS = (
+    "looking",
+    "searching",
+    "checking",
+    "ищу",
+    "идёт поиск",
+)
+
+
+def _is_no_results(text: str) -> bool:
+    if not text:
+        return False
+    t = text.lower()
+    return any(marker in t for marker in _NO_RESULTS_MARKERS)
+
+
+def _is_transient(text: str) -> bool:
+    if not text:
+        return False
+    t = text.lower()
+    return any(marker in t for marker in _TRANSIENT_MARKERS)
+
+
 async def lookup(query: str) -> str:
     # Connect using the existing session
     async with TelegramClient(SESSION_NAME, API_ID, API_HASH) as c:
@@ -89,26 +126,53 @@ async def lookup(query: str) -> str:
             bot = await c.get_entity(BOT)
         except ValueError:
             return "ERROR: Bot not found (Account may be limited)"
-            
+
         sent = await c.send_message(BOT, query)
         start = time.time()
         msgs = []
-        
-        while len(msgs) < 2 and time.time() - start < TIMEOUT:
+
+        # Collect bot replies until we see something actionable: a media
+        # attachment, a download-button message, or an explicit "no results"
+        # reply. Plain text without any of those markers is treated as a
+        # transient ack and we keep polling.
+        while time.time() - start < TIMEOUT:
             try:
                 got = await c.get_messages(bot, limit=10, min_id=sent.id)
             except Exception:
-                await asyncio.sleep(0.3); continue
-            
+                await asyncio.sleep(0.3)
+                continue
+
             for m in reversed(got):
                 if m.id > sent.id and all(m.id != x.id for x in msgs):
                     msgs.append(m)
-            await asyncio.sleep(0.3)
-        
-        if not msgs: return ""
 
-        target = msgs[1] if len(msgs) > 1 else msgs[-1]
-        
+            # Fast-path "no results" — every reply is short text and at
+            # least one of them carries the bot's "not found" wording.
+            if msgs and any(
+                _is_no_results(getattr(m, "message", "") or "") for m in msgs
+            ):
+                return ""
+
+            # Found a media reply — that's our report.
+            if any(m.media for m in msgs):
+                break
+
+            # Found a download-button reply — that's also actionable.
+            if any(getattr(m, "buttons", None) for m in msgs):
+                break
+
+            # Otherwise wait a bit and try again.
+            await asyncio.sleep(0.3)
+
+        if not msgs:
+            return ""
+
+        # Prefer the first reply that has a media attachment or buttons.
+        target = next(
+            (m for m in msgs if m.media or getattr(m, "buttons", None)),
+            msgs[-1],
+        )
+
         if target.media:
             path = await c.download_media(target, file=bytes)
             return path.decode("utf-8", "ignore")
@@ -117,20 +181,30 @@ async def lookup(query: str) -> str:
             clicked = False
             for b in sum((target.buttons or []), []):
                 if "download" in (getattr(b, "text", "") or "").lower():
-                    try: await target.click(text=getattr(b, "text", None)); clicked = True
-                    except: await target.click(); clicked = True
+                    try:
+                        await target.click(text=getattr(b, "text", None))
+                        clicked = True
+                    except Exception:
+                        await target.click()
+                        clicked = True
                     break
-            
+
             if clicked:
                 t0 = time.time()
                 while time.time() - t0 < 20:
                     try:
                         newer = await c.get_messages(bot, limit=6, min_id=target.id)
-                    except Exception: await asyncio.sleep(0.4); continue
+                    except Exception:
+                        await asyncio.sleep(0.4)
+                        continue
                     for m in reversed(newer):
                         if m.media:
                             path = await c.download_media(m, file=bytes)
                             return path.decode("utf-8", "ignore")
+                        # If the post-click reply itself says "no results"
+                        # (some collections emit that branch), give up.
+                        if _is_no_results(getattr(m, "message", "") or ""):
+                            return ""
                     await asyncio.sleep(0.4)
         return ""
 
@@ -198,7 +272,10 @@ async def run(session, target):
         return 1, [{"label": "Error", "value": str(e), "source": PARENT, "risk": "high"}]
 
     if not html_content:
-        return 0, [{"label": "Status", "value": "No report found", "source": PARENT, "risk": "low"}]
+        # No report = no breaches matched the target. Don't emit a status
+        # row — the dashboard already shows "0 results" and a synthetic row
+        # would just clutter the report.
+        return 0, []
     
     if html_content.startswith("ERROR:"):
         return 1, [{"label": "Bot Error", "value": html_content.replace("ERROR: ", ""), "source": PARENT, "risk": "high"}]
