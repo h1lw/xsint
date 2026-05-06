@@ -8,6 +8,8 @@ import subprocess
 import sys
 from urllib.parse import urlparse
 
+from . import __version__
+from ._version_check import check_for_update
 from .config import get_config
 from .core import XsintEngine
 from .ui import print_results
@@ -209,9 +211,9 @@ def _build_modules_table(caps, type_filter="all"):
     return rows
 
 
-HELP_TEXT = """\
-xsint ( https://github.com/memorypudding/xsint )
-Usage: xsint [Options] {target}
+HELP_TEXT = f"""\
+xsint {__version__} ( https://github.com/memorypudding/xsint )
+Usage: xsint [Options] {{target}}
 
 TARGET SPECIFICATION:
   Auto-detected types: email, username, phone, ip, address, hash, name, id, ssn, passport
@@ -231,6 +233,8 @@ NETWORK:
                  Set XSINT_PROXY in the environment to persist.
 
 MISC:
+  -V, --version: Print xsint version and exit
+      --no-version-check: Skip the GitHub update check for this run
   -h, --help: Print this help summary
 """
 
@@ -243,18 +247,45 @@ class _XsintParser(argparse.ArgumentParser):
         return "Usage: xsint [Options] {target}\n"
 
 
+def _maybe_print_update_notice():
+    """Print a one-line update prompt if a newer version is on GitHub."""
+    try:
+        info = check_for_update()
+    except Exception:
+        return
+    if not info:
+        return
+    cur, latest = info
+    if sys.stdout.isatty():
+        print(f"\033[33m[!] xsint {latest} is available (you have {cur}).\033[0m", file=sys.stderr)
+        print(f"\033[2m    Update: curl -fsSL https://raw.githubusercontent.com/memorypudding/xsint/main/install.sh | bash\033[0m", file=sys.stderr)
+    else:
+        print(f"[!] xsint {latest} is available (you have {cur}).", file=sys.stderr)
+        print(f"    Update: curl -fsSL https://raw.githubusercontent.com/memorypudding/xsint/main/install.sh | bash", file=sys.stderr)
+
+
 def main():
     parser = _XsintParser(prog="xsint", add_help=True)
     parser.add_argument("target", nargs="?")
     parser.add_argument("-m", "--modules", nargs="?", const="all", metavar="TYPE")
     parser.add_argument("--auth", nargs="*", metavar="ARGS")
     parser.add_argument("--proxy", metavar="URL")
+    parser.add_argument("-V", "--version", action="store_true")
+    parser.add_argument("--no-version-check", action="store_true")
 
     if len(sys.argv) == 1:
         print(HELP_TEXT, end="")
+        _maybe_print_update_notice()
         return
 
     args = parser.parse_args()
+
+    if args.version:
+        print(f"xsint {__version__}")
+        return
+
+    if not args.no_version_check:
+        _maybe_print_update_notice()
 
     if args.proxy:
         try:
