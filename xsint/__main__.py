@@ -439,18 +439,19 @@ async def async_main(args):
             return
 
         ran_any = False
-        # Live dashboard would corrupt machine-readable output, so route
-        # progress to stderr (and disable the animator) for json/html.
-        quiet_progress = args.fmt in ("json", "html")
-        animate = sys.stdout.isatty() and not quiet_progress
-        progress_stream = sys.stderr if quiet_progress else sys.stdout
+        # Where progress goes: machine-readable formats (--json, --html)
+        # would corrupt stdout, so route the dashboard to stderr instead.
+        # The animation still runs as long as the chosen stream is a TTY.
+        to_stderr = args.fmt in ("json", "html")
+        progress_stream = sys.stderr if to_stderr else sys.stdout
+        animate = progress_stream.isatty()
         # name -> {status: "running"|"done", count: int, status_str: str}
         modules_state = {}
         spinner_stop = asyncio.Event()
         last_lines = [0]  # mutable so closures can update
 
         def _render():
-            """Redraw the dashboard. TTY-only — non-TTY uses one-shot prints."""
+            """Redraw the dashboard on the chosen progress stream."""
             DOT_FRAMES = [".  ", ".. ", "...", " ..", "  .", "   "]
             frame = _render.frame = (getattr(_render, "frame", -1) + 1) % len(DOT_FRAMES)
             dots = DOT_FRAMES[frame]
@@ -469,8 +470,8 @@ async def async_main(args):
                 buf.append(f"\033[{last_lines[0]}A")
             for line in lines:
                 buf.append("\r\033[2K" + line + "\n")
-            sys.stdout.write("".join(buf))
-            sys.stdout.flush()
+            progress_stream.write("".join(buf))
+            progress_stream.flush()
             last_lines[0] = len(lines)
 
         def on_progress(event):
