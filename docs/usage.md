@@ -254,7 +254,7 @@ curl -fsSL https://raw.githubusercontent.com/h1lw/xsint/main/install.sh | bash
 ## All the flags, for reference
 
 ```text
-xsint 0.1.4.b ( https://github.com/h1lw/xsint )
+xsint 0.4.1 ( https://github.com/h1lw/xsint )
 Usage: xsint [Options] {target}
 
 TARGET SPECIFICATION:

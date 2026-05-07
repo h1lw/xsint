@@ -344,14 +344,19 @@ def main() -> None:
             warn(f"  echo 'export PATH=\"{bin_dir}:$PATH\"' >> {rc_file}")
         info("")
 
-    info("")
-    success("Setup complete.")
-    info(f"  install dir : {install_dir}")
-    info(f"  bin dir     : {bin_dir}")
-    if path_has_dir(bin_dir):
-        info("  run         : xsint <target>")
-    else:
-        info(f"  run         : {bin_dir / 'xsint'} <target>")
+    # Don't double-print the completion line — install.sh prints its
+    # own "Setup complete." / "Update complete." block right after we
+    # exit, with the same install-dir / bin-dir / run details. Two of
+    # them in a row was confusing.
+    if not is_update:
+        info("")
+        success("Setup complete.")
+        info(f"  install dir : {install_dir}")
+        info(f"  bin dir     : {bin_dir}")
+        if path_has_dir(bin_dir):
+            info("  run         : xsint <target>")
+        else:
+            info(f"  run         : {bin_dir / 'xsint'} <target>")
 
 
 if __name__ == "__main__":
