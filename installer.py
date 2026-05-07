@@ -292,7 +292,9 @@ def main() -> None:
     copy_tree(script_dir, install_dir)
     info("")
 
-    section("Installing xsint and dependencies...")
+    is_update = bool(os.environ.get("XSINT_UPDATE_MODE"))
+    verb = "Updating" if is_update else "Installing"
+    section(f"{verb} xsint and dependencies...")
     pip_install(python, ["-e", str(install_dir), "--quiet"])
     info("")
 
@@ -300,13 +302,13 @@ def main() -> None:
     # pip's resolver sometimes can't satisfy both (each pins different
     # transitive versions). Splitting lets each get its own resolution;
     # on a hard conflict we fall back to --no-deps for that tool.
-    section("Installing gitfive...")
+    section(f"{verb} gitfive...")
     pip_install_with_fallback(
         python, ["--upgrade", "gitfive"], fallback_no_deps=True,
     )
     info("")
 
-    section("Installing ghunt...")
+    section(f"{verb} ghunt...")
     pip_install_with_fallback(
         python, ["--upgrade", "git+https://github.com/mxrch/ghunt"],
         fallback_no_deps=True,

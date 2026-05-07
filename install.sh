@@ -56,6 +56,19 @@ print_message() {
     echo -e "${color}${msg}${NC}"
 }
 
+# In update mode (set by `xsint --update`) the user already has xsint
+# working — skip the first-time framing and use "Updating ..." section
+# headers instead of "Installing ...".
+UPDATE_MODE="${XSINT_UPDATE_MODE:-}"
+ACTION_VERB="Installing"
+ACTION_VERB_PROG="Installing"
+COMPLETION_MSG="Setup complete."
+if [[ -n "$UPDATE_MODE" ]]; then
+    ACTION_VERB="Updating"
+    ACTION_VERB_PROG="Updating"
+    COMPLETION_MSG="Update complete."
+fi
+
 # ---------- 1. Detect a compatible Python (3.10–3.13) ----------
 
 find_python() {
@@ -119,7 +132,11 @@ tmp_dir="${TMPDIR:-/tmp}/xsint_install_$$"
 mkdir -p "$tmp_dir"
 trap 'rm -rf "$tmp_dir"' EXIT
 
-print_message info "\n${MUTED}Downloading${NC} $APP ${MUTED}from${NC} $tarball_url"
+if [[ -n "$UPDATE_MODE" ]]; then
+    print_message info "\n${MUTED}Fetching latest${NC} $APP ${MUTED}from${NC} $tarball_url"
+else
+    print_message info "\n${MUTED}Downloading${NC} $APP ${MUTED}from${NC} $tarball_url"
+fi
 curl -# -fsSL -o "$tmp_dir/src.tar.gz" "$tarball_url"
 
 print_message info "${MUTED}Extracting...${NC}"
@@ -129,7 +146,7 @@ src_root=$(find "$tmp_dir" -maxdepth 1 -mindepth 1 -type d | head -n1)
 
 # ---------- 4. Run the Python installer ----------
 
-print_message info "\n${MUTED}Installing into${NC} $install_dir"
+print_message info "\n${MUTED}${ACTION_VERB_PROG} into${NC} $install_dir"
 "$PYTHON" "$src_root/installer.py" \
     --install-dir "$install_dir" \
     --bin-dir "$bin_dir"
@@ -182,7 +199,7 @@ fi
 # ---------- 6. Done ----------
 
 echo
-print_message ok "Setup complete."
+print_message ok "$COMPLETION_MSG"
 echo -e "  ${MUTED}install dir :${NC} $install_dir"
 echo -e "  ${MUTED}bin dir     :${NC} $bin_dir"
 if [[ ":$PATH:" == *":$bin_dir:"* ]]; then

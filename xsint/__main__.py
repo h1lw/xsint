@@ -308,11 +308,11 @@ def _maybe_print_update_notice():
 
 
 def _do_update():
-    """Re-run the install.sh from GitHub against the current install.
+    """Re-run install.sh from GitHub in update mode.
 
-    Same script the curl one-liner uses; pulls the latest release,
-    overwrites the install dir, regenerates the wrapper. Exits with the
-    installer's return code.
+    Sets XSINT_UPDATE_MODE so the install script knows it's an update
+    (different section headers, no "Setup complete." line — we print
+    our own outro showing old → new version).
     """
     if not shutil.which("bash"):
         print("[!] --update needs bash on PATH; install bash or run install.sh manually",
@@ -323,11 +323,72 @@ def _do_update():
               file=sys.stderr)
         sys.exit(1)
 
-    print(f"[*] updating xsint from {_INSTALL_URL}", file=sys.stderr)
-    print("    (this will overwrite the current install)", file=sys.stderr)
+    cur = __version__
+
+    is_tty = sys.stderr.isatty()
+    BOLD = "\033[1m" if is_tty else ""
+    DIM = "\033[2m" if is_tty else ""
+    GRN = "\033[32m" if is_tty else ""
+    YEL = "\033[33m" if is_tty else ""
+    RST = "\033[0m" if is_tty else ""
+
+    print(file=sys.stderr)
+    print(f"  {BOLD}xsint update{RST}  {DIM}({_INSTALL_URL}){RST}", file=sys.stderr)
+    print(f"  {DIM}current version: {RST}{cur}", file=sys.stderr)
+    print(file=sys.stderr)
+
     cmd = f"curl -fsSL {_INSTALL_URL} | bash"
-    rc = subprocess.call(cmd, shell=True)
-    sys.exit(rc)
+    env = os.environ.copy()
+    env["XSINT_UPDATE_MODE"] = "1"
+    rc = subprocess.call(cmd, shell=True, env=env)
+
+    if rc != 0:
+        print(f"\n  {YEL}[!] update failed (exit {rc}){RST}", file=sys.stderr)
+        sys.exit(rc)
+
+    new = _read_installed_version() or "(unknown)"
+    print(file=sys.stderr)
+    if new == cur:
+        print(f"  {GRN}✓{RST} already on the latest version ({new}).", file=sys.stderr)
+    elif new == "(unknown)":
+        print(f"  {GRN}✓{RST} update complete (couldn't read new version).",
+              file=sys.stderr)
+    else:
+        print(f"  {GRN}✓{RST} updated: {DIM}{cur}{RST} → {BOLD}{new}{RST}",
+              file=sys.stderr)
+    print(file=sys.stderr)
+    sys.exit(0)
+
+
+def _read_installed_version():
+    """Read xsint's __version__ from disk after the installer has run.
+
+    Re-importing in-process won't help — Python's already cached the
+    old __version__. We reach for the file the installer just wrote.
+    """
+    candidates = [
+        Path.home() / ".local" / "share" / "xsint" / "xsint" / "__init__.py",
+    ]
+    if os.environ.get("XSINT_INSTALL_DIR"):
+        candidates.insert(
+            0,
+            Path(os.environ["XSINT_INSTALL_DIR"]) / "xsint" / "__init__.py",
+        )
+    if os.name == "nt":
+        candidates.append(
+            Path.home() / "AppData" / "Local" / "xsint" / "xsint" / "__init__.py"
+        )
+
+    import re as _re
+    for path in candidates:
+        try:
+            text = path.read_text(encoding="utf-8")
+        except OSError:
+            continue
+        match = _re.search(r'__version__\s*=\s*["\']([^"\']+)', text)
+        if match:
+            return match.group(1)
+    return None
 
 
 def _write_html_report(report, target, path_str):
