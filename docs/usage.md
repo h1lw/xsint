@@ -236,7 +236,7 @@ XSINT_MODULE_TIMEOUT=60 xsint someone@example.com
 ## All the flags, for reference
 
 ```text
-xsint 0.1.3 ( https://github.com/h1lw/xsint )
+xsint 0.1.4.a ( https://github.com/h1lw/xsint )
 Usage: xsint [Options] {target}
 
 TARGET SPECIFICATION:
