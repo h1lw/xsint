@@ -182,10 +182,6 @@ fi
 # ---------- 6. Done ----------
 
 echo
-echo -e "${MUTED}            ▀█▀${NC}"
-echo -e "${MUTED} ▀▄▀ █▀▀ █  █  █▀█ ▀█▀${NC}"
-echo -e "${MUTED} █ █ ▄▄█ █▀ █ █ █  █${NC}"
-echo
 print_message ok "Setup complete."
 echo -e "  ${MUTED}install dir :${NC} $install_dir"
 echo -e "  ${MUTED}bin dir     :${NC} $bin_dir"
