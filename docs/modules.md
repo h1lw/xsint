@@ -1,44 +1,47 @@
 # Modules
 
-`xsint -m` prints this list at runtime, with current `active` / `locked` status. `xsint -m <type>` filters to modules that handle a given input type.
+Each module is one source — a website, an API, or a third-party tool — that `xsint` queries on your behalf. Run `xsint -m` to see this list at runtime with the live `active` / `locked` status of each.
 
-| Name             | Source   | Input Types                                               | Returns                                            | Auth                |
-| ---------------- | -------- | --------------------------------------------------------- | -------------------------------------------------- | ------------------- |
-| `instagram`      | custom   | username                                                  | recovery methods                                   | none                |
-| `phone_basic`    | custom   | phone                                                     | formats, country, carrier, line type, timezone    | none                |
-| `email_enum`     | custom   | email                                                     | registered accounts (67 services across 18 categories)     | none      |
-| `phone_enum`     | custom   | phone                                                     | registered accounts (Amazon, Instagram, Snapchat)         | none      |
-| `ip_basic`       | external | ip                                                        | version, private/public                            | none                |
-| `osm`            | external | address                                                   | address, coordinates, location type                | none                |
-| `hibp`           | external | email, username, phone, hash                              | breaches, breach names, breach dates               | api key             |
-| `intelx`         | external | email, username, phone                                    | breaches, leaks, pastes, documents                 | api key             |
-| `nineghz`        | external | email, username, phone, ip, hash, name, id, ssn, passport | breaches                                           | api key             |
-| `haxalot_module` | external | email, username, phone, ip                                | breaches, passwords, pii                           | setup               |
-| `ghunt_lookup`   | external | email, phone, gaia_id                                     | gaia_id, profile, services, maps, calendar         | login               |
-| `gitfive_module` | external | email, username                                           | email, profile info, ssh keys                      | login               |
+## What's available
+
+| Name             | Source   | Input types                                                | What it returns                                  | Setup                |
+| ---------------- | -------- | ---------------------------------------------------------- | ------------------------------------------------ | -------------------- |
+| `email_enum`     | custom   | email                                                      | registered accounts on 67 services across 18 categories | none           |
+| `phone_enum`     | custom   | phone                                                      | registered accounts on Amazon, Snapchat          | none                 |
+| `phone_basic`    | custom   | phone                                                      | formats, country, carrier, line type, timezone   | none                 |
+| `instagram`      | custom   | username                                                   | account-recovery hints (masked email/phone)      | none                 |
+| `ip_basic`       | external | ip                                                         | version, public/private classification           | none                 |
+| `osm`            | external | address                                                    | geocoded address, coordinates, location type     | none                 |
+| `nineghz`        | external | email, phone, username, ip, hash, name, id, ssn, passport  | breach hits                                      | none (key optional)  |
+| `hibp`           | external | email, username, phone, hash                               | breach hits with names + dates                   | API key              |
+| `intelx`         | external | email, username, phone                                     | leaks, pastes, documents                         | API key              |
+| `haxalot_module` | external | email, username, phone, ip                                 | breaches, leaked passwords/hashes, scattered PII | Telegram setup       |
+| `ghunt_lookup`   | external | email, phone, gaia_id                                      | Google profile (Gaia ID, photo, Maps activity)   | Google login         |
+| `gitfive_module` | external | email, username                                            | GitHub profile, resolved private email           | GitHub login         |
 
 ## Source
 
-- **custom** — module is implemented inside `xsint/modules/`.
-- **external** — module wraps a third-party tool or service.
+- **custom** — implemented inside `xsint/modules/`. Easy to read, easy to fork.
+- **external** — wraps a third-party tool or API.
 
-## Auth
+## Setup
 
-- **none** — runs without credentials.
-- **api key** — set via `xsint --auth <service> <key>` or the `XSINT_<SERVICE>_API_KEY` env var.
-- **setup** — interactive setup via `xsint --auth <service>`.
-- **login** — interactive login flow from the upstream tool.
+- **none** — runs as soon as `xsint` is installed.
+- **API key** — set with `xsint --auth <service> <key>` or `XSINT_<SERVICE>_API_KEY` env var.
+- **Telegram setup / Google login / GitHub login** — interactive flow you run once. See [auth.md](auth.md).
 
-Modules requiring credentials are **disabled by default** — they appear as `locked` in `xsint -m` and are skipped during scans until the relevant `--auth` step has been completed.
+A module that needs setup but hasn't gotten it shows up as `locked` in `xsint -m`. Locked modules are skipped during scans — the scan still runs everything else.
 
-See [auth.md](auth.md) for details.
+## active vs locked
 
-## Status: `active` vs `locked`
+`active` means the module is ready to run for the given target type. `locked` means one of these is true:
 
-A module is `locked` when:
+- The target type only works with a paid key, and no key is configured.
+- A required dependency isn't installed (`ghunt`, `gitfive`).
+- The module's `is_ready()` self-check returned false (e.g. login session is missing or expired).
 
-- It declares the input type as `paid` and no API key is configured, or
-- It requires a runtime dependency that is not installed (e.g. `ghunt`, `gitfive`), or
-- Its `is_ready()` check returns false (e.g. login state missing).
+`xsint -m <type>` filters the table to just modules that handle a given input type — handy for finding what would run on, say, a phone number:
 
-`xsint` skips locked modules during a scan and reports the count under `[*] eligible modules`.
+```bash
+xsint -m phone
+```
