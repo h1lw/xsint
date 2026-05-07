@@ -7,3 +7,11 @@ config.json
 .env
 *.session
 *.session-journal
+
+# Editor / OS noise
+.DS_Store
+.claude/
+
+# Local test artifacts (e.g. xsint --html out.html)
+out.html
+*.report.html
