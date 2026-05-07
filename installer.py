@@ -109,26 +109,66 @@ def ensure_pip(python: str) -> None:
 
 
 def pip_install(python: str, args: list[str]) -> None:
+    code, out, err = _pip_install_try(python, args)
+    if code == 0:
+        return
+    if out:
+        info(out)
+    if err:
+        print(err, file=sys.stderr)
+    raise SystemExit(code)
+
+
+def _pip_install_try(python: str, args: list[str]) -> tuple[int, str, str]:
+    """Run pip install. Returns (returncode, stdout, stderr)."""
     cmd = [python, "-m", "pip", "install", "--user", "--no-warn-script-location"] + args
     code, out, err = run_capture(cmd)
     if code == 0:
-        return
+        return 0, out, err
 
     text = f"{out}\n{err}".lower()
     if "externally-managed-environment" in text or "externally managed" in text:
-        run(
-            [
-                python,
-                "-m",
-                "pip",
-                "install",
-                "--break-system-packages",
-                "--user",
-                "--no-warn-script-location",
-            ]
-            + args
-        )
+        # PEP 668 — retry with --break-system-packages.
+        cmd2 = [
+            python, "-m", "pip", "install", "--break-system-packages",
+            "--user", "--no-warn-script-location",
+        ] + args
+        code2, out2, err2 = run_capture(cmd2)
+        return code2, out2, err2
+
+    return code, out, err
+
+
+def pip_install_with_fallback(python: str, primary: list[str], *, fallback_no_deps: bool = False) -> None:
+    """Install with the given args; on a resolver conflict, retry --no-deps.
+
+    Used for ghunt+gitfive — their pinned transitive deps sometimes
+    diverge enough that pip can't find a single resolution. --no-deps
+    lets the install land at the cost of skipping dep checks. Both
+    tools' actual import-time deps are usually already provided by
+    xsint's own install so this is safe in practice.
+    """
+    code, out, err = _pip_install_try(python, primary)
+    if code == 0:
         return
+
+    blob = f"{out}\n{err}".lower()
+    is_resolver_conflict = (
+        "resolutionimpossible" in blob
+        or "conflicting dependencies" in blob
+        or "no matching distribution" in blob
+    )
+
+    if fallback_no_deps and is_resolver_conflict:
+        warn("[!] dep conflict — retrying with --no-deps")
+        code2, out2, err2 = _pip_install_try(python, primary + ["--no-deps"])
+        if code2 == 0:
+            return
+        if out2:
+            info(out2)
+        if err2:
+            print(err2, file=sys.stderr)
+        raise SystemExit(code2)
 
     if out:
         info(out)
@@ -256,8 +296,21 @@ def main() -> None:
     pip_install(python, ["-e", str(install_dir), "--quiet"])
     info("")
 
-    section("Installing ghunt + gitfive...")
-    pip_install(python, ["--upgrade", "git+https://github.com/mxrch/ghunt", "gitfive", "--quiet"])
+    # Install ghunt and gitfive in *separate* pip invocations. Combined,
+    # pip's resolver sometimes can't satisfy both (each pins different
+    # transitive versions). Splitting lets each get its own resolution;
+    # on a hard conflict we fall back to --no-deps for that tool.
+    section("Installing gitfive...")
+    pip_install_with_fallback(
+        python, ["--upgrade", "gitfive"], fallback_no_deps=True,
+    )
+    info("")
+
+    section("Installing ghunt...")
+    pip_install_with_fallback(
+        python, ["--upgrade", "git+https://github.com/mxrch/ghunt"],
+        fallback_no_deps=True,
+    )
     info("")
 
     if os.name == "nt":
