@@ -18,7 +18,7 @@ from typing import Optional, Tuple
 
 from . import __version__
 
-VERSION_URL = "https://raw.githubusercontent.com/memorypudding/xsint/main/xsint/__init__.py"
+VERSION_URL = "https://raw.githubusercontent.com/h1lw/xsint/main/xsint/__init__.py"
 CACHE_PATH = Path.home() / ".config" / "xsint" / "version_cache.json"
 CACHE_TTL = 24 * 3600  # seconds
 NETWORK_TIMEOUT = 1.5  # seconds

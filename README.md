@@ -18,7 +18,7 @@ It's the kind of tool a journalist might use to vet a tip, a security team might
 On Mac or Linux:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/memorypudding/xsint/main/install.sh | bash
+curl -fsSL https://raw.githubusercontent.com/h1lw/xsint/main/install.sh | bash
 ```
 
 You need Python 3.10 or newer. The installer handles everything else.

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 APP=xsint
-REPO=memorypudding/xsint
+REPO=h1lw/xsint
 
 MUTED='\033[0;2m'
 RED='\033[0;31m'

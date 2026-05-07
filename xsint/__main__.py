@@ -245,7 +245,7 @@ def _build_modules_table(caps, type_filter="all"):
 
 
 HELP_TEXT = f"""\
-xsint {__version__} ( https://github.com/memorypudding/xsint )
+xsint {__version__} ( https://github.com/h1lw/xsint )
 Usage: xsint [Options] {{target}}
 
 TARGET SPECIFICATION:
@@ -297,10 +297,10 @@ def _maybe_print_update_notice():
     cur, latest = info
     if sys.stdout.isatty():
         print(f"\033[33m[!] xsint {latest} is available (you have {cur}).\033[0m", file=sys.stderr)
-        print(f"\033[2m    Update: curl -fsSL https://raw.githubusercontent.com/memorypudding/xsint/main/install.sh | bash\033[0m", file=sys.stderr)
+        print(f"\033[2m    Update: curl -fsSL https://raw.githubusercontent.com/h1lw/xsint/main/install.sh | bash\033[0m", file=sys.stderr)
     else:
         print(f"[!] xsint {latest} is available (you have {cur}).", file=sys.stderr)
-        print(f"    Update: curl -fsSL https://raw.githubusercontent.com/memorypudding/xsint/main/install.sh | bash", file=sys.stderr)
+        print(f"    Update: curl -fsSL https://raw.githubusercontent.com/h1lw/xsint/main/install.sh | bash", file=sys.stderr)
 
 
 def _write_html_report(report, target, path_str):

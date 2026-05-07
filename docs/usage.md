@@ -3,7 +3,7 @@
 ## CLI
 
 ```text
-xsint ( https://github.com/memorypudding/xsint )
+xsint ( https://github.com/h1lw/xsint )
 Usage: xsint [Options] {target}
 
 TARGET SPECIFICATION:
