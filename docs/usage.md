@@ -1,17 +1,239 @@
-# Usage
+# Using xsint
 
-The short version: hand `xsint` whatever you have and let it figure out the rest.
+So you've got `xsint` installed and you're wondering what to do with it. Good. Let's get into it.
+
+## The Tao of xsint
+
+Here's the entire pitch:
+
+> You hand it one piece of public information about a person — an
+> email, a username, a phone number, a street address — and it asks
+> a bunch of websites and services *"hey, do you know about this?"*
+> at the same time. Then it prints what came back.
+
+That's it. That's the whole tool. The "magic" is just that doing this manually across 80 sources would take you all afternoon, and `xsint` does it in about ten seconds.
+
+The thing it gives you back is called a **dossier** — a one-page summary of who, where, and what's been leaked. You can also ask for the raw stuff if you'd rather see it source-by-source, or get JSON if you're piping into something else.
+
+## Your first scan
+
+Run this:
 
 ```bash
 xsint someone@example.com
-xsint +14155551234
-xsint johndoe
-xsint 8.8.8.8
 ```
 
-A clean dossier prints to your terminal a few seconds later. If you want a different shape — JSON for piping, HTML for sharing — there's a flag for that.
+Replace `someone@example.com` with whatever email you actually want to look at. (Run it on yourself first! That's a great way to see what `xsint` does without putting it on someone else.)
 
-## All the flags
+You'll see something like this scroll by:
+
+```text
+[*] email_enum: ...
+[+] ghunt_lookup: 11 results
+[-] gitfive_module: no results
+[+] haxalot_module: 35 results
+[+] nineghz: 7 results
+```
+
+Each line is one module — one of the sources `xsint` consults — reporting in. The little symbol at the start tells you what's going on:
+
+| Symbol | Color  | What it means                       |
+| :----: | ------ | ----------------------------------- |
+| `[*]`  | yellow | Still working, hold on              |
+| `[+]`  | green  | Done; found at least one thing      |
+| `[-]`  | red    | Done; came up empty                 |
+
+(If you don't see colors, your terminal probably isn't a TTY — running through a pipe, redirected to a file, that kind of thing. The symbols are still there, just not pretty.)
+
+After everything finishes, you get the **dossier**.
+
+## What does the dossier look like?
+
+Glad you asked!
+
+```text
+  IDENTITY REPORT
+  someone@example.com
+  ──────────────────────────────────────────────────────────────────────
+  type      email
+  scanned   2026-05-06 15:39
+  scope     4 sources · 10 breaches · 5 passwords · 2 hashes
+
+
+  IDENTITY
+  ────────
+  name            Jane Doe                                       Google
+                  Jane                                     Mathway, ATT
+  github          12345678                                      GitFive
+
+  ALIASES  ·  3
+  ─────────────
+                  janedoe2013                                     Canva
+                  Jane_doe                                     Duolingo
+
+  REGISTERED ACCOUNTS  ·  11
+  ──────────────────────────
+  Adobe · Amazon · Duolingo · Espn · GitHub · Office365 · Spotify · ...
+
+  BREACH HISTORY  ·  10
+  ─────────────────────
+                  2023-08-01  Duolingo Scrape Database             9Ghz
+                  2020-01-13  Mathway                     Haxalot, 9Ghz
+                  ...
+
+  CREDENTIALS LEAKED
+  ──────────────────
+  passwords (5)   somepassword                                  Mathway
+                  hunter2                                         Canva
+                  ...
+
+  hashes (2)      $2a$10$3btf1EEjvH9...                           Canva
+```
+
+Each section answers a different question:
+
+- **IDENTITY** — who is this? Names from authoritative sources (Google, GitHub) come first; names from breaches show up if multiple breaches agree on them.
+- **ALIASES** — what handles do they use? Usernames, nicks, gamertags.
+- **REGISTERED ACCOUNTS** — what services have they signed up for?
+- **CONTACT** — phone numbers, IPs, alternate emails, mobile carriers.
+- **LOCATIONS** — addresses and locations from breach records.
+- **BREACH HISTORY** — every breach they've shown up in, dated where possible.
+- **CREDENTIALS LEAKED** — passwords and password hashes, deduped, with the breach they came from.
+- **ACTIVITY** — registration dates, account-status events, Google Maps stats.
+- **LINKS** — URLs to profile pages.
+
+The grey text on the right of each row is the **source** — which breach or service that piece of data came from. So when you see `Jane Doe ... Mathway, ATT`, that's saying: the Mathway breach AND the AT&T breach both have a record listing "Jane Doe" against this email.
+
+That's the default view. It's called `--pretty`, even though you don't have to type that.
+
+## "What if I want it different?"
+
+There are four output formats. Just one is on by default; the rest you opt into with a flag.
+
+### `--pretty` — the dossier (default)
+
+You just saw it. Don't need to do anything. But you can still type `--pretty` if you want to be explicit, or to override an environment that defaulted you somewhere else.
+
+### `--raw` — source-by-source dump
+
+This is the un-synthesized view. Every module's output, grouped by module, exactly as the module wrote it down. Useful when you want to see what a specific source said, without my summary layer in the way.
+
+```bash
+xsint --raw someone@example.com
+```
+
+### `--json` — for piping
+
+```bash
+xsint --json someone@example.com > scan.json
+```
+
+Or, if you have `jq`:
+
+```bash
+xsint --json someone@example.com | jq '.results[] | select(.source=="9Ghz")'
+```
+
+Stdout becomes a JSON object. The progress dashboard goes to stderr, so your redirected stdout stays clean. Shape:
+
+```json
+{
+  "target": "someone@example.com",
+  "type": "email",
+  "scanned_at": 1778103784,
+  "findings": 28,
+  "results": [
+    { "label": "...", "value": "...", "source": "...", "group": "..." }
+  ],
+  "themes": { },
+  "error": null
+}
+```
+
+### `--html <PATH>` — for sharing
+
+```bash
+xsint --html report.html someone@example.com
+```
+
+Writes a self-contained HTML file (single page, embedded CSS, dark-mode aware) you can open in any browser. Same dossier sections, just rendered with chips for breaches, clickable links, and a colored highlight on leaked passwords.
+
+(`--html` *requires* a path argument. If you typed `xsint --html target` we'd assume you wanted the HTML written to a file called `target` and there's no target left for the scan, which is silly. So we make you spell it out.)
+
+## What kind of target?
+
+`xsint` figures out what you've handed it most of the time. An `@` sign means email. Digits with a `+` means phone. Four numbers separated by dots means IP. And so on.
+
+When the guess might be wrong — or when the value is genuinely ambiguous — you can force it with a prefix:
+
+```bash
+xsint email:someone@example.com
+xsint user:johndoe
+xsint phone:+14155551234
+xsint ip:8.8.8.8
+xsint "addr:1600 Pennsylvania Ave NW, Washington, DC"
+xsint hash:5f4dcc3b5aa765d61d8327deb882cf99
+xsint "name:Jane Doe"
+xsint id:1234567890
+xsint ssn:123-45-6789
+xsint passport:AB1234567
+```
+
+(Yes, you really can search for a literal hash. `xsint` will check it against breach databases. Useful when someone hands you a leaked password hash and you want to know if it's been seen before.)
+
+If your target has spaces in it, wrap the whole thing in quotes — that's just a shell thing, not an `xsint` thing.
+
+## "Nothing happened. What gives?"
+
+A few possibilities:
+
+**Every module ran but came up empty.** You'll see:
+
+```text
+[!] no intel found
+```
+
+That genuinely is what it sounds like. The target either doesn't exist on any of these services, or what's there is private enough that none of the public APIs will tell us about it. Try a different angle (do you have their phone? An old username?).
+
+**Nothing was eligible to run.** Like:
+
+```text
+[!] no eligible modules — run --auth to enable more, or check `xsint -m`
+```
+
+This means every module that *could* handle your target type is locked behind a credential you haven't set up yet. Run `xsint --auth` to see what's missing, or `xsint -m <type>` to see what would handle this kind of target. Setting up credentials is a one-time thing — see [auth.md](auth.md).
+
+**Something errored.** Each module is on its own clock — if one crashes, the others keep going. The crash shows up as an `[!]` line in the dashboard or as an `Error` finding in the report. (Almost always a network glitch. Run it again.)
+
+## The module list
+
+You can ask `xsint` to show its toolbox:
+
+```bash
+xsint -m
+```
+
+This prints a table of every module — name, where it comes from (`custom` means I wrote it; `external` means it wraps a third-party tool), whether it's `active` or `locked`, and which input types it handles.
+
+If you want to know what would actually run on, say, a phone number:
+
+```bash
+xsint -m phone
+```
+
+That filters to just the phone-handling modules.
+
+## "Can I make it slow down?"
+
+Each module has a 25-second budget by default. If a module is taking too long (slow proxy, flaky network), it gets cut off and reported as a `Timeout`. Bump the budget if you need to:
+
+```bash
+XSINT_MODULE_TIMEOUT=60 xsint someone@example.com
+```
+
+(That's 60 seconds.)
+
+## All the flags, for reference
 
 ```text
 xsint 0.1.3 ( https://github.com/h1lw/xsint )
@@ -46,193 +268,11 @@ MISC:
   -h, --help: Print this help summary
 ```
 
-## Forcing a target type
+That's the whole CLI. Once you've used it a few times you'll have most of it memorized.
 
-`xsint` auto-detects the kind of thing you've given it. If the guess is wrong, prefix the target:
+## Where to go from here
 
-```bash
-xsint email:someone@example.com
-xsint user:johndoe
-xsint phone:+14155551234
-xsint ip:8.8.8.8
-xsint "addr:1600 Pennsylvania Ave NW, Washington, DC"
-xsint hash:5f4dcc3b5aa765d61d8327deb882cf99
-xsint "name:John Doe"
-xsint id:1234567890
-xsint ssn:123-45-6789
-xsint passport:AB1234567
-```
-
-## Output formats
-
-By default `xsint` prints a synthesized **identity report** — names, accounts, breach exposure, leaked credentials, all deduped across sources. That's `--pretty`. The other three formats trade that report off for something more machine-friendly.
-
-### `--pretty` (default)
-
-```text
-  IDENTITY REPORT
-  someone@example.com
-  ──────────────────────────────────────────────────────────────────────────
-  type      email
-  scanned   2026-05-06 15:39
-  scope     4 sources · 10 breaches · 5 passwords · 2 hashes
-
-
-  IDENTITY
-  ────────
-  name            John Doe                                              Google
-                  John                                            Mathway, ATT
-  github          12345678                                             GitFive
-
-  ALIASES  ·  3
-  ─────────────
-                  johndoe2013                                            Canva
-                  John_doe                                            Duolingo
-
-  REGISTERED ACCOUNTS  ·  11
-  ──────────────────────────
-  Adobe · Amazon · Duolingo · Espn · GitHub · Office365 · Pinterest · Spotify
-
-  BREACH HISTORY  ·  10
-  ─────────────────────
-                  2023-08-01  Duolingo Scrape Database                    9Ghz
-                  2020-01-13  Mathway                            Haxalot, 9Ghz
-                  2019-05-24  Canva                              Haxalot, 9Ghz
-                  ...
-
-  CREDENTIALS LEAKED
-  ──────────────────
-  passwords (5)   somepassword                                         Mathway
-                  hunter2                                                Canva
-                  ...
-
-  hashes (2)      $2a$10$3btf1EEjvH9...                                  Canva
-```
-
-Section headers are bold and source attributions are dimmed grey when stdout is a terminal. Pipe it (`xsint ... | less`) and you get plain text instead.
-
-### `--raw`
-
-The legacy source-by-source dump. Useful when you want to see exactly what each module returned without the synthesis layer:
-
-```bash
-xsint --raw user@example.com
-```
-
-```text
-type     : EMAIL
-findings : 28
-sources  : 4
-
-9Ghz (2)
-  Breaches : 1
-  Breach   : Adobe (2013-10-04)
-
-EmailEnum (11)
-  Creator / Adobe       : registered (https://adobe.com)
-  Dev / Github          : registered (https://github.com)
-  ...
-
-GHunt (11)
-  👤 Account / Gaia ID  : 113877113026769046726
-  👤 Account / Name     : Some Person
-  ...
-```
-
-### `--json`
-
-Stdout becomes a JSON object — convenient for piping into `jq`, saving for later, or feeding another tool:
-
-```bash
-xsint --json user@example.com > scan.json
-xsint --json user@example.com | jq '.results[] | select(.source=="9Ghz")'
-```
-
-The JSON shape:
-
-```json
-{
-  "target": "user@example.com",
-  "type": "email",
-  "scanned_at": 1778103784,
-  "findings": 28,
-  "results": [
-    { "label": "...", "value": "...", "source": "...", "group": "...", "risk": "..." },
-    ...
-  ],
-  "themes": { ... },
-  "error": null
-}
-```
-
-The progress dashboard goes to **stderr** under `--json`, so the redirected stdout stays clean.
-
-### `--html <PATH>`
-
-Writes a self-contained HTML page (embedded CSS, dark-mode aware) to the path you give it:
-
-```bash
-xsint --html report.html user@example.com
-```
-
-The same identity-dossier layout as `--pretty`, but rendered as a webpage with chip tags for breaches, clickable links, monospaced hashes, and a colored highlight on leaked passwords. Open it in any browser. Good for sharing or archiving.
-
-## What runs while it's running
-
-```text
-[*] email_enum: ...
-[+] ghunt_lookup: 11 results
-[-] gitfive_module: no results
-[+] haxalot_module: 35 results
-[+] nineghz: 7 results
-```
-
-The prefixes are color-coded on a TTY:
-
-| Prefix | Color | Meaning                                  |
-| ------ | ----- | ---------------------------------------- |
-| `[*]`  | yellow | Module is still running.                |
-| `[+]`  | green  | Done — found at least one result.       |
-| `[-]`  | red    | Done — found nothing.                   |
-
-The dots after `[*]` are an animated spinner, each module pacing independently.
-
-## When nothing comes back
-
-If every available module ran but returned nothing:
-
-```text
-[!] no intel found
-```
-
-If everything was locked (no auth configured for the target type):
-
-```text
-[!] no eligible modules — run --auth to enable more, or check `xsint -m`
-```
-
-Run `xsint -m` to see which modules are active and which are locked.
-
-## Listing modules
-
-```bash
-# Everything
-xsint -m
-
-# Just the modules that handle a specific target type
-xsint -m email
-xsint -m phone
-xsint -m username
-```
-
-The output table shows `name`, `source` (custom vs external dependency), `status` (active in green, locked in red), and the input types each module supports. A locked module either needs credentials (see [auth.md](auth.md)) or its underlying tool isn't installed.
-
-## Tweaking timeouts
-
-Each module is wrapped in a 25-second timeout by default. Override with:
-
-```bash
-XSINT_MODULE_TIMEOUT=60 xsint user@example.com
-```
-
-A module that exceeds its budget shows up as a `Timeout` finding rather than crashing the whole scan.
+- Need a richer scan? Some modules need credentials — see [auth.md](auth.md).
+- Curious which modules do what? See [modules.md](modules.md).
+- Want everything to go through a proxy? See [proxy.md](proxy.md).
+- Want to write your own module? See [development.md](development.md).
