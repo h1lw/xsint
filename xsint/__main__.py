@@ -273,6 +273,7 @@ OUTPUT FORMAT (mutually exclusive; default --pretty):
 
 MISC:
   -V, --version: Print xsint version and exit
+  -U, --update : Pull the latest xsint from GitHub and reinstall in place
       --no-version-check: Skip the GitHub update check for this run
   -h, --help: Print this help summary
 """
@@ -286,6 +287,9 @@ class _XsintParser(argparse.ArgumentParser):
         return "Usage: xsint [Options] {target}\n"
 
 
+_INSTALL_URL = "https://raw.githubusercontent.com/h1lw/xsint/main/install.sh"
+
+
 def _maybe_print_update_notice():
     """Print a one-line update prompt if a newer version is on GitHub."""
     try:
@@ -297,10 +301,33 @@ def _maybe_print_update_notice():
     cur, latest = info
     if sys.stdout.isatty():
         print(f"\033[33m[!] xsint {latest} is available (you have {cur}).\033[0m", file=sys.stderr)
-        print(f"\033[2m    Update: curl -fsSL https://raw.githubusercontent.com/h1lw/xsint/main/install.sh | bash\033[0m", file=sys.stderr)
+        print(f"\033[2m    Update with: xsint --update\033[0m", file=sys.stderr)
     else:
         print(f"[!] xsint {latest} is available (you have {cur}).", file=sys.stderr)
-        print(f"    Update: curl -fsSL https://raw.githubusercontent.com/h1lw/xsint/main/install.sh | bash", file=sys.stderr)
+        print("    Update with: xsint --update", file=sys.stderr)
+
+
+def _do_update():
+    """Re-run the install.sh from GitHub against the current install.
+
+    Same script the curl one-liner uses; pulls the latest release,
+    overwrites the install dir, regenerates the wrapper. Exits with the
+    installer's return code.
+    """
+    if not shutil.which("bash"):
+        print("[!] --update needs bash on PATH; install bash or run install.sh manually",
+              file=sys.stderr)
+        sys.exit(1)
+    if not shutil.which("curl"):
+        print("[!] --update needs curl on PATH; install curl or run install.sh manually",
+              file=sys.stderr)
+        sys.exit(1)
+
+    print(f"[*] updating xsint from {_INSTALL_URL}", file=sys.stderr)
+    print("    (this will overwrite the current install)", file=sys.stderr)
+    cmd = f"curl -fsSL {_INSTALL_URL} | bash"
+    rc = subprocess.call(cmd, shell=True)
+    sys.exit(rc)
 
 
 def _write_html_report(report, target, path_str):
@@ -328,6 +355,7 @@ def main():
     parser.add_argument("--auth", nargs="*", metavar="ARGS")
     parser.add_argument("--proxy", metavar="URL")
     parser.add_argument("-V", "--version", action="store_true")
+    parser.add_argument("-U", "--update", action="store_true")
     parser.add_argument("--no-version-check", action="store_true")
 
     fmt_group = parser.add_mutually_exclusive_group()
@@ -363,6 +391,12 @@ def main():
 
     if args.version:
         print(f"xsint {__version__}")
+        return
+
+    if args.update:
+        # Skip the version-check spam — we're about to overwrite the
+        # whole install anyway.
+        _do_update()
         return
 
     if not args.no_version_check:

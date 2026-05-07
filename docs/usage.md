@@ -233,6 +233,24 @@ XSINT_MODULE_TIMEOUT=60 xsint someone@example.com
 
 (That's 60 seconds.)
 
+## Updating
+
+Every time you run a scan, `xsint` quietly checks GitHub for a newer version and tells you if there's one. To actually grab it:
+
+```bash
+xsint --update
+# or
+xsint -U
+```
+
+That re-runs the install script against your current install — pulls the latest tarball, copies into `~/.local/share/xsint`, reinstalls deps, leaves your config alone. Equivalent to the curl one-liner you used to install in the first place; it's just bundled into a flag for convenience.
+
+If `xsint --update` doesn't work for some reason (no `bash` or `curl` on PATH), you can always fall back to the original install command:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/h1lw/xsint/main/install.sh | bash
+```
+
 ## All the flags, for reference
 
 ```text
@@ -264,6 +282,7 @@ OUTPUT FORMAT (mutually exclusive; default --pretty):
 
 MISC:
   -V, --version: Print xsint version and exit
+  -U, --update : Pull the latest xsint from GitHub and reinstall in place
       --no-version-check: Skip the GitHub update check for this run
   -h, --help: Print this help summary
 ```
