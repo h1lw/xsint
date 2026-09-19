@@ -21,7 +21,7 @@ On Mac or Linux:
 curl -fsSL https://raw.githubusercontent.com/h1lw/xsint/main/install.sh | bash
 ```
 
-You need Python 3.10 or newer. The installer handles everything else.
+You need Python 3.10–3.13. The installer handles everything else.
 
 ## Use
 
