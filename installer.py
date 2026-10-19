@@ -203,17 +203,22 @@ def _wrapper_invocation(module: str) -> str:
     return f"-m {module}"
 
 
-def write_unix_wrapper(path: Path, python: str, module: str) -> None:
-    content = (
-        "#!/usr/bin/env sh\n"
-        f'exec "{python}" {_wrapper_invocation(module)} "$@"\n'
-    )
+def write_unix_wrapper(path: Path, python: str, module: str, install_dir: Path | None = None) -> None:
+    lines = ["#!/usr/bin/env sh"]
+    if install_dir is not None:
+        lines.append(f'export PYTHONPATH="{install_dir}${{PYTHONPATH:+:$PYTHONPATH}}"')
+    lines.append(f'exec "{python}" {_wrapper_invocation(module)} "$@"')
+    content = "\n".join(lines) + "\n"
     path.write_text(content, encoding="utf-8")
     path.chmod(path.stat().st_mode | stat.S_IXUSR | stat.S_IXGRP | stat.S_IXOTH)
 
 
-def write_windows_wrapper(path: Path, python: str, module: str) -> None:
-    content = f'@echo off\r\n"{python}" {_wrapper_invocation(module)} %*\r\n'
+def write_windows_wrapper(path: Path, python: str, module: str, install_dir: Path | None = None) -> None:
+    lines = ["@echo off"]
+    if install_dir is not None:
+        lines.append(f'set "PYTHONPATH={install_dir};%PYTHONPATH%"')
+    lines.append(f'"{python}" {_wrapper_invocation(module)} %*')
+    content = "\r\n".join(lines) + "\r\n"
     path.write_text(content, encoding="utf-8")
 
 
@@ -295,7 +300,7 @@ def main() -> None:
     is_update = bool(os.environ.get("XSINT_UPDATE_MODE"))
     verb = "Updating" if is_update else "Installing"
     section(f"{verb} xsint and dependencies...")
-    pip_install(python, ["-e", str(install_dir), "--quiet"])
+    pip_install(python, [str(install_dir), "--quiet"])
     info("")
 
     # Install ghunt and gitfive in *separate* pip invocations. Combined,
@@ -316,14 +321,14 @@ def main() -> None:
     info("")
 
     if os.name == "nt":
-        write_windows_wrapper(bin_dir / "xsint.cmd", python, "xsint")
+        write_windows_wrapper(bin_dir / "xsint.cmd", python, "xsint", install_dir)
         write_windows_wrapper(bin_dir / "ghunt.cmd", python, "ghunt")
         write_windows_wrapper(bin_dir / "gitfive.cmd", python, "gitfive")
         success(f"Installed xsint wrapper to: {bin_dir / 'xsint.cmd'}")
         success(f"Installed ghunt wrapper to: {bin_dir / 'ghunt.cmd'}")
         success(f"Installed gitfive wrapper to: {bin_dir / 'gitfive.cmd'}")
     else:
-        write_unix_wrapper(bin_dir / "xsint", python, "xsint")
+        write_unix_wrapper(bin_dir / "xsint", python, "xsint", install_dir)
         write_unix_wrapper(bin_dir / "ghunt", python, "ghunt")
         write_unix_wrapper(bin_dir / "gitfive", python, "gitfive")
         success(f"Installed xsint wrapper to: {bin_dir / 'xsint'}")
